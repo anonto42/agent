@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/project.json
+layer: 'library'
+language: 'typescript'
+
+tasks:
+  check:
+    command: 'tsc --noEmit'
+    inputs: ['src/**/*', 'tsconfig.json']

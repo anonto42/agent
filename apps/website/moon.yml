@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/project.json
+layer: 'application'
+language: 'typescript'
+
+tasks:
+  dev:
+    command: 'next dev'
+    preset: 'server'
+    options:
+      cache: false
+  build:
+    command: 'next build'
+    inputs: ['src/**/*', 'next.config.ts', 'package.json']
+    outputs: ['.next']
+  check:
+    command: 'tsc --noEmit'
+    inputs: ['src/**/*', 'tsconfig.json']

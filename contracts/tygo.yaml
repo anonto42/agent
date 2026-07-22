@@ -1,0 +1,9 @@
+# tygo turns the Go structs in this package into TypeScript.
+# Install once:  go install github.com/gzuidhof/tygo@latest
+# Regenerate:    moon run contracts:generate   (or: tygo generate)
+packages:
+  - path: 'github.com/levelaxis/charli/contracts'
+    output_path: '../packages/shared/src/types.gen.ts'
+    type_mappings:
+      'interface{}': 'unknown'
+      any: 'unknown'

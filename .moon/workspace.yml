@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/workspace.json
+#
+# moon is the single task runner for BOTH worlds (Go + TypeScript).
+# It caches build/test/check results so unchanged apps are skipped.
+
+projects:
+  - 'apps/backend'
+  - 'apps/extension'
+  - 'apps/website'
+  - 'packages/*'
+  - 'contracts'
+
+vcs:
+  client: 'git'
+  defaultBranch: 'main'

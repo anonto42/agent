@@ -1,0 +1,7 @@
+# Only the TypeScript world is a pnpm workspace.
+# apps/backend (Go) is intentionally NOT listed — pnpm skips it because
+# it has no package.json. moon is what ties Go + TS together.
+packages:
+  - apps/extension
+  - apps/website
+  - packages/*

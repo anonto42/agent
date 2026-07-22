@@ -1,0 +1,8 @@
+go 1.24
+
+// The Go world: the backend plus the shared contracts package
+// (contracts is the source of truth that tygo turns into TS types).
+use (
+	./apps/backend
+	./contracts
+)

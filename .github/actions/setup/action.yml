@@ -1,0 +1,36 @@
+name: Setup environment
+description: Set up Go, Node/pnpm, and moon for the Charli monorepo, install deps.
+
+runs:
+  using: composite
+  steps:
+    # pnpm version comes from the root package.json "packageManager" field.
+    - uses: pnpm/action-setup@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+
+    - uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache-dependency-path: |
+          apps/backend/go.sum
+          contracts/go.sum
+
+    - name: Install moon
+      shell: bash
+      run: npm install -g @moonrepo/cli
+
+    - name: Cache moon
+      uses: actions/cache@v4
+      with:
+        path: .moon/cache
+        key: moon-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml', '**/go.sum', '**/moon.yml') }}
+        restore-keys: |
+          moon-${{ runner.os }}-
+
+    - name: Install JS dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

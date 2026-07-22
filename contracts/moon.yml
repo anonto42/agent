@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/project.json
+layer: 'library'
+language: 'go'
+
+tasks:
+  # Regenerate the TypeScript types the extension/website import.
+  generate:
+    command: 'tygo generate'
+    inputs: ['**/*.go', 'tygo.yaml']
+    # Writes packages/shared/src/types.gen.ts (outside this project), so the
+    # task is uncached rather than declaring a cross-project output.
+    options:
+      cache: false

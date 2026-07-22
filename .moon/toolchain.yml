@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/toolchain.json
+#
+# Node is managed by moon (via pnpm). Go runs from the system PATH
+# (each Go project uses `platform: system`), so no Go toolchain block
+# is needed here — install Go 1.23+ yourself.
+
+node:
+  packageManager: 'pnpm'

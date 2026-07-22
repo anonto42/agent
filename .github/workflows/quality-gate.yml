@@ -1,0 +1,29 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      # moon caches per-project, so unchanged apps are skipped across runs.
+      - name: Check (go vet + tsc)
+        run: moon run :check
+
+      - name: Test (go test + vitest)
+        run: moon run :test
+
+      - name: Build (backend + extension + website)
+        run: moon run :build

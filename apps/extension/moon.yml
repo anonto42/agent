@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/project.json
+layer: 'application'
+language: 'typescript'
+
+tasks:
+  dev:
+    command: 'wxt'
+    preset: 'server'
+    options:
+      cache: false
+  build:
+    command: 'wxt build'
+    inputs: ['entrypoints/**/*', 'wxt.config.ts', 'package.json']
+    outputs: ['.output']
+  check:
+    command: 'tsc --noEmit'
+    inputs: ['entrypoints/**/*', 'tsconfig.json']

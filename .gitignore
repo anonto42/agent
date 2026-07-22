@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+.output/
+.next/
+bin/
+apps/backend/bin/
+
+# moon cache
+.moon/cache/
+.moon/docker/
+
+# go
+*.exe
+*.test
+*.out
+tmp/
+apps/backend/tmp/
+
+# env & secrets
+.env
+.env.local
+*.local
+
+# os / editor
+.DS_Store
+*.log
