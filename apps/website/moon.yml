@@ -4,14 +4,14 @@ language: 'typescript'
 
 tasks:
   dev:
-    command: 'next dev'
+    command: 'pnpm exec next dev'
     preset: 'server'
     options:
       cache: false
   build:
-    command: 'next build'
+    command: 'pnpm exec next build'
     inputs: ['src/**/*', 'next.config.ts', 'package.json']
     outputs: ['.next']
   check:
-    command: 'tsc --noEmit'
+    command: 'pnpm exec tsc --noEmit'
     inputs: ['src/**/*', 'tsconfig.json']

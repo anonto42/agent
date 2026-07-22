@@ -4,14 +4,14 @@ language: 'typescript'
 
 tasks:
   dev:
-    command: 'wxt'
+    command: 'pnpm exec wxt'
     preset: 'server'
     options:
       cache: false
   build:
-    command: 'wxt build'
+    command: 'pnpm exec wxt build'
     inputs: ['entrypoints/**/*', 'wxt.config.ts', 'package.json']
     outputs: ['.output']
   check:
-    command: 'tsc --noEmit'
+    command: 'pnpm exec tsc --noEmit'
     inputs: ['entrypoints/**/*', 'tsconfig.json']

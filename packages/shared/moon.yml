@@ -4,5 +4,5 @@ language: 'typescript'
 
 tasks:
   check:
-    command: 'tsc --noEmit'
+    command: 'pnpm exec tsc --noEmit'
     inputs: ['src/**/*', 'tsconfig.json']
