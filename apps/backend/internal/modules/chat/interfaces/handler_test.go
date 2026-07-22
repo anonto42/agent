@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,15 +11,25 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
+	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/stream"
 )
+
+// fakeLLM lets the test run offline (no real provider / API key).
+type fakeLLM struct{ reply string }
+
+func (f fakeLLM) Complete(_ context.Context, _ []llm.Message) (string, error) {
+	return f.reply, nil
+}
 
 func TestChatRoundTripSSE(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	hub := stream.NewHub()
 	engine := gin.New()
-	RegisterRoutes(engine.Group("/api/v1"), NewHandler(hub))
+	handler := NewHandler(hub, fakeLLM{reply: "hello from charli"}, zap.NewNop())
+	RegisterRoutes(engine.Group("/api/v1"), handler)
 
 	srv := httptest.NewServer(engine)
 	defer srv.Close()
@@ -31,8 +42,7 @@ func TestChatRoundTripSSE(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 
 	reader := bufio.NewReader(resp.Body)
-	// Consume the ": connected" comment; the subscription is now live.
-	if _, err := reader.ReadString('\n'); err != nil {
+	if _, err := reader.ReadString('\n'); err != nil { // consume ": connected"
 		t.Fatalf("read connect line: %v", err)
 	}
 
@@ -44,7 +54,7 @@ func TestChatRoundTripSSE(t *testing.T) {
 	}
 	_ = pr.Body.Close()
 
-	// Read the stream until the reply arrives.
+	// Read the stream until the model's reply arrives.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		line, err := reader.ReadString('\n')
@@ -60,8 +70,8 @@ func TestChatRoundTripSSE(t *testing.T) {
 		if err := json.Unmarshal([]byte(payload), &e); err != nil {
 			t.Fatalf("bad event json %q: %v", line, err)
 		}
-		if e.ID == "1" && e.Content == "You said: hi" {
-			return // success
+		if e.ID == "1" && e.Content == "hello from charli" {
+			return // success: the (faked) model reply streamed back
 		}
 		t.Fatalf("unexpected event: %+v", e)
 	}

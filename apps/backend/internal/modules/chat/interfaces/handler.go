@@ -6,22 +6,32 @@
 package interfaces
 
 import (
+	"context"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
+	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/stream"
 	"github.com/levelaxis/charli/backend/pkg/response"
 )
 
+const systemPrompt = "You are Charli, a helpful, concise browser assistant."
+
 // Handler serves the chat SSE stream and the message endpoint.
 type Handler struct {
 	hub *stream.Hub
+	llm llm.Client
+	log *zap.Logger
 }
 
 // NewHandler constructs the chat handler.
-func NewHandler(hub *stream.Hub) *Handler { return &Handler{hub: hub} }
+func NewHandler(hub *stream.Hub, client llm.Client, log *zap.Logger) *Handler {
+	return &Handler{hub: hub, llm: client, log: log}
+}
 
 // Events opens a Server-Sent Events stream for a session. The client keeps it
 // open; the server pushes assistant replies (and, later, agent steps) down it.
@@ -66,7 +76,8 @@ type sendRequest struct {
 	Content string `json:"content" binding:"required"`
 }
 
-// Send accepts a user message and pushes the reply to the session's stream.
+// Send accepts a user message, acknowledges immediately, and produces the
+// model's reply asynchronously — it arrives on the session's SSE stream.
 func (h *Handler) Send(c *gin.Context) {
 	var req sendRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -74,11 +85,24 @@ func (h *Handler) Send(c *gin.Context) {
 		return
 	}
 
-	// Phase 0: echo. Phase 1+: hand to the agent loop and stream its steps.
-	reply := stream.Event{Type: "chat", ID: req.ID, Content: "You said: " + req.Content}
-	if !h.hub.Publish(req.Session, reply) {
-		response.Error(c, http.StatusNotFound, "no active stream for session", nil)
+	go h.reply(req.Session, req.ID, req.Content)
+	response.OK(c, "accepted", nil)
+}
+
+// reply calls the model and pushes the answer (or an error event) to the
+// session's stream. Runs on its own goroutine, off the request context.
+func (h *Handler) reply(session, id, content string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	answer, err := h.llm.Complete(ctx, []llm.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: content},
+	})
+	if err != nil {
+		h.log.Warn("llm complete failed", zap.Error(err))
+		h.hub.Publish(session, stream.Event{Type: "error", ID: id, Content: "Charli could not answer right now."})
 		return
 	}
-	response.OK(c, "accepted", nil)
+	h.hub.Publish(session, stream.Event{Type: "chat", ID: id, Content: answer})
 }

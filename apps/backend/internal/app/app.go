@@ -9,6 +9,7 @@ import (
 	chat "github.com/levelaxis/charli/backend/internal/modules/chat/interfaces"
 	health "github.com/levelaxis/charli/backend/internal/modules/health/interfaces"
 	"github.com/levelaxis/charli/backend/internal/shared/config"
+	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/shared/middleware"
 	"github.com/levelaxis/charli/backend/internal/stream"
 )
@@ -32,10 +33,10 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 	api := engine.Group("/api/v1")
 	health.RegisterRoutes(api, health.NewHandler())
 
-	// Realtime chat over SSE (stream down) + POST (send up).
-	// Phase 0: echo; later: the agent loop streams its steps.
+	// Realtime chat over SSE (stream down) + POST (send up), answered by the LLM.
 	hub := stream.NewHub()
-	chat.RegisterRoutes(api, chat.NewHandler(hub))
+	llmClient := llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel)
+	chat.RegisterRoutes(api, chat.NewHandler(hub, llmClient, log))
 
 	return &App{Config: cfg, Logger: log, Engine: engine}
 }
