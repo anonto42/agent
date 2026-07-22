@@ -2,7 +2,9 @@
 
 `apps/backend` — Go 1.24. **Gin** (HTTP) · **GORM** (Postgres) · **Viper**
 (config) · **Zap** (logging) · **go-redis** · **golang-jwt**. Domain-Driven
-module layout, mirroring `aloevol/e_commerce/backend`.
+module layout, mirroring `aloevol/e_commerce/backend`. Realtime chat uses
+**SSE** (stream down) + **POST** (send up), not WebSockets — see
+[why](../../../CLAUDE.md).
 
 ## Load With
 
@@ -24,13 +26,14 @@ internal/
 │   ├── config/          Viper config
 │   ├── middleware/       cors, auth, logger, rate_limit, security_headers
 │   └── infrastructure/  db + cache clients
-└── websocket/           the realtime agent gateway (goroutine per session)
+└── stream/              SSE pub/sub hub (one channel per session)
 pkg/                     reusable, domain-free: response, logger, jwt, pagination
 ```
 
-Planned Charli modules: `chat`, `agent` (the ReAct loop), `tools` (skill
-registry), `audit`. Cross-cutting: `safety` (policy engine) and the `llm`
-client live in `shared/infrastructure`; `health` is the reference module.
+Charli modules: `chat` (SSE `/events` + POST `/chat`), later `agent` (the ReAct
+loop), `tools` (skill registry), `audit`. Cross-cutting: `safety` (policy
+engine) and the `llm` client live in `shared/infrastructure`; `health` is the
+reference module.
 
 ## Defaults
 

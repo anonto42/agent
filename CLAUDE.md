@@ -22,14 +22,21 @@ and the extension's content script performs the concrete DOM action. Roughly
 **20% agent decisions / 80% deterministic backend code**.
 
 ```text
-extension (perceive + act)  <--websocket-->  Go backend (agent loop + safety)  -->  postgres/redis
+extension (perceive + act)  <--SSE + POST-->  Go backend (agent loop + safety)  -->  postgres/redis
 ```
+
+**Realtime transport: SSE + POST, not WebSockets.** The agent needs to stream
+steps DOWN (SSE `/events`) and receive user actions UP (`POST /chat`,
+`/confirm`, `/interrupt`). SSE covers server→client push with built-in
+reconnect; POST covers client→server. WebSockets were prototyped then dropped —
+we don't need a full-duplex channel for this, and SSE+POST is simpler. Reach for
+WebSockets only if a continuous two-way stream is ever required (L3/L4).
 
 ## Layout & ownership
 
 - `apps/backend` (Go) — **Gin + GORM + Viper + Zap**, DDD module layout
   (`internal/modules/<domain>/{domain,application,infrastructure,interfaces}`,
-  `internal/shared`, `internal/websocket`, `pkg/`), mirroring
+  `internal/shared`, `internal/stream`, `pkg/`), mirroring
   `aloevol/e_commerce/backend`. Hosts the agent loop, tool registry, safety
   engine, memory, LLM client. Hot reload via `air`; lint via `golangci-lint`.
   Module: `github.com/levelaxis/charli/backend`. See

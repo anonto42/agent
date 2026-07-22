@@ -6,10 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	chat "github.com/levelaxis/charli/backend/internal/modules/chat/interfaces"
 	health "github.com/levelaxis/charli/backend/internal/modules/health/interfaces"
 	"github.com/levelaxis/charli/backend/internal/shared/config"
 	"github.com/levelaxis/charli/backend/internal/shared/middleware"
-	ws "github.com/levelaxis/charli/backend/internal/websocket"
+	"github.com/levelaxis/charli/backend/internal/stream"
 )
 
 // App holds the top-level application dependencies.
@@ -31,8 +32,10 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 	api := engine.Group("/api/v1")
 	health.RegisterRoutes(api, health.NewHandler())
 
-	// Realtime chat gateway (Phase 0: echo; later: the agent loop).
-	engine.GET("/ws", ws.NewHandler(log).Serve)
+	// Realtime chat over SSE (stream down) + POST (send up).
+	// Phase 0: echo; later: the agent loop streams its steps.
+	hub := stream.NewHub()
+	chat.RegisterRoutes(api, chat.NewHandler(hub))
 
 	return &App{Config: cfg, Logger: log, Engine: engine}
 }

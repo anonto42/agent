@@ -8,7 +8,7 @@ and it helps you get work done — from inline text rewriting up to multi-step t
 ```text
 agent/
 ├── apps/
-│   ├── backend/     Go — the agent brain, HTTP + websocket gateway
+│   ├── backend/     Go — the agent brain, HTTP + SSE (/events) + POST (/chat)
 │   ├── extension/   TypeScript — WXT browser extension (chat side panel + content scripts)
 │   └── website/     TypeScript — Next.js marketing site + user console / audit log
 ├── packages/

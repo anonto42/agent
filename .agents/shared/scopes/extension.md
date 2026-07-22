@@ -13,7 +13,7 @@ Side-panel chat UI + content scripts (perception + action).
 
 ```text
 entrypoints/            WXT entrypoints — THIN, wire only
-├── background.ts       message router + websocket client to the backend
+├── background.ts       message router (later: the SSE + POST client to backend)
 ├── content.ts          perception (a11y tree) + action (click/type)
 └── sidepanel/          mounts <ChatApp/> from features
 features/               FSD feature slices (chat, ...) — the real UI + logic
@@ -29,7 +29,7 @@ relative imports.
 - Entrypoints stay thin; all UI/logic lives in `features/` and `shared/`.
 - The content script NEVER acts without the backend safety engine's go-ahead.
 - Redact sensitive fields (password inputs, card numbers) before sending any
-  page content over the websocket.
+  page content to the backend.
 - One kill switch (Esc) must always stop an in-progress action.
 
 ## Verify

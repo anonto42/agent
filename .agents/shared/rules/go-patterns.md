@@ -39,8 +39,8 @@ Stack: Gin · GORM · Viper · Zap · go-redis. Lint with `golangci-lint`
 
 - The loop emits ONE tool call per turn, applies the result, then re-decides.
 - Bound every loop: max turns + `context` deadline + user kill switch.
-- One goroutine per websocket session, tied to a `context`; exits on cancel.
-  No goroutine leaks.
+- SSE handlers block in `c.Stream` on the session channel; they exit when the
+  request `context` is cancelled (client disconnect). No goroutine leaks.
 - Tool executors re-validate their arguments server-side — never trust the
   model's arguments as safe.
 

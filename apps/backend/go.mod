@@ -3,7 +3,6 @@ module github.com/levelaxis/charli/backend
 go 1.24
 
 require (
-	github.com/coder/websocket v1.8.15
 	github.com/gin-gonic/gin v1.10.0
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.27.0
