@@ -15,7 +15,8 @@ tasks:
     outputs: ['.output']
   check:
     command: 'pnpm exec tsc --noEmit'
-    inputs: ['entrypoints/**/*', 'features/**/*', 'shared/**/*', 'entities/**/*', 'tsconfig.json']
+    inputs:
+      ['entrypoints/**/*', 'features/**/*', 'shared/**/*', 'entities/**/*', 'tsconfig.json', '*.config.ts']
   test:
     command: 'pnpm exec vitest run'
     inputs:

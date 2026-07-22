@@ -5,6 +5,7 @@ package stream
 import "sync"
 
 // Event is a single message pushed down a client's stream.
+// Mirrors contracts.ChatEvent (the shared source of truth → generated TS).
 type Event struct {
 	Type    string `json:"type"`
 	ID      string `json:"id"`

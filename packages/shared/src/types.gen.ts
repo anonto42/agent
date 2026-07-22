@@ -3,12 +3,15 @@
 //////////
 // source: types.go
 /*
-Package contracts is the SINGLE SOURCE OF TRUTH for the data shapes
-shared between the Go backend and the TypeScript extension/website.
+Package contracts is the SINGLE SOURCE OF TRUTH for the data shapes shared
+between the Go backend and the TypeScript extension/website.
 
 You define types here once, in Go. Running `moon run contracts:generate`
 (tygo) emits the matching TypeScript into packages/shared/src/types.gen.ts,
 so the two languages can never drift apart.
+
+Transport: chat is SSE (server -> client, GET /events) + POST (client ->
+server, POST /chat). The types below describe that protocol.
 */
 
 /**
@@ -19,17 +22,25 @@ export const RoleUser: AgentRole = "user";
 export const RoleAssistant: AgentRole = "assistant";
 export const RoleSystem: AgentRole = "system";
 /**
- * ChatMessage is one turn in a Charli conversation.
+ * ChatMessage is one turn in a Charli conversation (the UI's model).
  */
 export interface ChatMessage {
   role: AgentRole;
   content: string;
 }
 /**
- * WSMessage is the envelope for every websocket frame exchanged
- * between the extension and the backend.
+ * ChatRequest is the POST /chat body sent by the client (client -> server).
  */
-export interface WSMessage {
-  type: string; // e.g. "chat", "action", "ping"
-  payload: any; // shape depends on Type
+export interface ChatRequest {
+  session: string; // identifies the caller's SSE stream
+  id: string; // correlates this message with its reply
+  content: string;
+}
+/**
+ * ChatEvent is a message pushed down the SSE stream (server -> client).
+ */
+export interface ChatEvent {
+  type: string; // "chat" | "error"
+  id: string; // matches the ChatRequest.ID it answers
+  content: string;
 }

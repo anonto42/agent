@@ -32,8 +32,8 @@ tied together by one task runner: **moon** (caches build/test/check across both)
 ## First-time setup
 
 ```bash
-pnpm install                                   # TS deps (+ wxt prepare)
 docker compose -f infra/docker-compose.yml up -d
+pnpm install                                   # TS deps (+ wxt prepare)
 ```
 
 ## Everyday commands (via moon)

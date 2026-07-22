@@ -70,6 +70,7 @@ func (h *Handler) Events(c *gin.Context) {
 	})
 }
 
+// sendRequest is the POST /chat body. Mirrors contracts.ChatRequest.
 type sendRequest struct {
 	Session string `json:"session" binding:"required"`
 	ID      string `json:"id" binding:"required"`

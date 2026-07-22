@@ -14,7 +14,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@vitejs/plugin-react": "^4.3.4"
+      "@vitejs/plugin-react": "^4.3.4",
+      "vite": "6.4.3"
     }
   }
 }
