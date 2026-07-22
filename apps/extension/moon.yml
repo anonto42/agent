@@ -10,8 +10,9 @@ tasks:
       cache: false
   build:
     command: 'pnpm exec wxt build'
-    inputs: ['entrypoints/**/*', 'wxt.config.ts', 'package.json']
+    inputs:
+      ['entrypoints/**/*', 'features/**/*', 'shared/**/*', 'entities/**/*', 'wxt.config.ts', 'package.json']
     outputs: ['.output']
   check:
     command: 'pnpm exec tsc --noEmit'
-    inputs: ['entrypoints/**/*', 'tsconfig.json']
+    inputs: ['entrypoints/**/*', 'features/**/*', 'shared/**/*', 'entities/**/*', 'tsconfig.json']

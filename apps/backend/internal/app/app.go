@@ -9,6 +9,7 @@ import (
 	health "github.com/levelaxis/charli/backend/internal/modules/health/interfaces"
 	"github.com/levelaxis/charli/backend/internal/shared/config"
 	"github.com/levelaxis/charli/backend/internal/shared/middleware"
+	ws "github.com/levelaxis/charli/backend/internal/websocket"
 )
 
 // App holds the top-level application dependencies.
@@ -30,7 +31,8 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 	api := engine.Group("/api/v1")
 	health.RegisterRoutes(api, health.NewHandler())
 
-	// TODO(phase-0): mount internal/websocket gateway + chat/agent modules here.
+	// Realtime chat gateway (Phase 0: echo; later: the agent loop).
+	engine.GET("/ws", ws.NewHandler(log).Serve)
 
 	return &App{Config: cfg, Logger: log, Engine: engine}
 }
