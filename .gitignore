@@ -27,3 +27,6 @@ apps/backend/tmp/
 # os / editor
 .DS_Store
 *.log
+
+# extension build artifact served by the website (regen: pnpm --filter @charli/extension zip)
+apps/website/public/charli-extension.zip
