@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/project.json
+layer: 'application'
+language: 'typescript'
+
+tasks:
+  # Full end-to-end. Named `e2e` (not `test`) so `moon run :test` stays fast;
+  # run explicitly with `moon run :e2e`. Builds the extension panel first.
+  e2e:
+    command: 'pnpm exec playwright test'
+    deps: ['extension:build', 'backend:build']
+    options:
+      cache: false

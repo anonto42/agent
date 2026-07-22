@@ -9,6 +9,7 @@ projects:
   - 'apps/website'
   - 'packages/*'
   - 'contracts'
+  - 'e2e'
 
 vcs:
   client: 'git'

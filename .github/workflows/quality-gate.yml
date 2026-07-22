@@ -27,3 +27,9 @@ jobs:
 
       - name: Build (backend + extension + website)
         run: moon run :build
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @charli/e2e exec playwright install --with-deps chromium
+
+      - name: E2E (real panel + backend + mock LLM)
+        run: moon run :e2e

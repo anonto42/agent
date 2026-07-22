@@ -16,3 +16,7 @@ tasks:
   check:
     command: 'pnpm exec tsc --noEmit'
     inputs: ['entrypoints/**/*', 'features/**/*', 'shared/**/*', 'entities/**/*', 'tsconfig.json']
+  test:
+    command: 'pnpm exec vitest run'
+    inputs:
+      ['features/**/*', 'shared/**/*', 'entities/**/*', 'vitest.config.ts', 'vitest.setup.ts']
