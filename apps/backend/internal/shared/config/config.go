@@ -23,11 +23,19 @@ type Config struct {
 	LLMModel   string
 }
 
-// Load reads configuration from environment variables (and any exported .env).
+// Load reads configuration from environment variables and .env file.
 func Load() (*Config, error) {
 	v := viper.New()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
+
+	v.SetConfigFile(".env")
+	v.SetConfigType("env")
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, err
+		}
+	}
 
 	v.SetDefault("ENV", "development")
 	v.SetDefault("PORT", "8080")
