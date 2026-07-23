@@ -54,3 +54,4 @@ moon run contracts:generate # regenerate shared TS types from contracts/types.go
 
 L0 inline assist → L1 page understanding → L2 single actions → L3 multi-step
 tasks → L4 cross-app workflows. Start at L0–L1; each phase is a usable product.
+# agent
