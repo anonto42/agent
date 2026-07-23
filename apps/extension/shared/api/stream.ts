@@ -40,7 +40,7 @@ class CharliStream {
     return this.ready;
   }
 
-  async send(message: ChatEvent): Promise<ChatEvent> {
+  async send(message: ChatEvent, page = ''): Promise<ChatEvent> {
     await this.connect();
 
     return new Promise<ChatEvent>((resolve, reject) => {
@@ -54,6 +54,7 @@ class CharliStream {
         session: this.session,
         id: message.id,
         content: message.content,
+        page,
       };
 
       fetch(`${BASE}/chat`, {

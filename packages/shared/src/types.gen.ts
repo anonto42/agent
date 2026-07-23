@@ -34,7 +34,8 @@ export interface ChatMessage {
 export interface ChatRequest {
   session: string; // identifies the caller's SSE stream
   id: string; // correlates this message with its reply
-  content: string;
+  content: string; // the user's message
+  page?: string; // text of the page the user is viewing (L1)
 }
 /**
  * ChatEvent is a message pushed down the SSE stream (server -> client).

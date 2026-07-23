@@ -24,6 +24,48 @@ func (f fakeLLM) Complete(_ context.Context, _ []llm.Message) (string, error) {
 	return f.reply, nil
 }
 
+// capturingLLM records the messages it was asked to complete.
+type capturingLLM struct {
+	reply string
+	got   chan []llm.Message
+}
+
+func (c *capturingLLM) Complete(_ context.Context, msgs []llm.Message) (string, error) {
+	c.got <- msgs
+	return c.reply, nil
+}
+
+func TestSendIncludesPageContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	hub := stream.NewHub()
+	cap := &capturingLLM{reply: "ok", got: make(chan []llm.Message, 1)}
+	engine := gin.New()
+	RegisterRoutes(engine.Group("/api/v1"), NewHandler(hub, cap, zap.NewNop()))
+
+	srv := httptest.NewServer(engine)
+	defer srv.Close()
+
+	body := `{"session":"s1","id":"1","content":"summarize","page":"The secret word is platypus."}`
+	resp, err := http.Post(srv.URL+"/api/v1/chat", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("post chat: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	select {
+	case msgs := <-cap.got:
+		var joined string
+		for _, m := range msgs {
+			joined += m.Content + "\n"
+		}
+		if !strings.Contains(joined, "platypus") {
+			t.Fatalf("page context missing from prompt: %q", joined)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("llm was never called")
+	}
+}
+
 func TestChatRoundTripSSE(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	hub := stream.NewHub()

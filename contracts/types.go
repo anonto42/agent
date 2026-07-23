@@ -26,9 +26,10 @@ type ChatMessage struct {
 
 // ChatRequest is the POST /chat body sent by the client (client -> server).
 type ChatRequest struct {
-	Session string `json:"session"` // identifies the caller's SSE stream
-	ID      string `json:"id"`      // correlates this message with its reply
-	Content string `json:"content"`
+	Session string `json:"session"`        // identifies the caller's SSE stream
+	ID      string `json:"id"`             // correlates this message with its reply
+	Content string `json:"content"`        // the user's message
+	Page    string `json:"page,omitempty"` // text of the page the user is viewing (L1)
 }
 
 // ChatEvent is a message pushed down the SSE stream (server -> client).

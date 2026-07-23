@@ -75,6 +75,7 @@ type sendRequest struct {
 	Session string `json:"session" binding:"required"`
 	ID      string `json:"id" binding:"required"`
 	Content string `json:"content" binding:"required"`
+	Page    string `json:"page"` // text of the page the user is viewing (L1)
 }
 
 // Send accepts a user message, acknowledges immediately, and produces the
@@ -86,20 +87,26 @@ func (h *Handler) Send(c *gin.Context) {
 		return
 	}
 
-	go h.reply(req.Session, req.ID, req.Content)
+	go h.reply(req.Session, req.ID, req.Content, req.Page)
 	response.OK(c, "accepted", nil)
 }
 
 // reply calls the model and pushes the answer (or an error event) to the
 // session's stream. Runs on its own goroutine, off the request context.
-func (h *Handler) reply(session, id, content string) {
+func (h *Handler) reply(session, id, content, page string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	answer, err := h.llm.Complete(ctx, []llm.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: content},
-	})
+	messages := []llm.Message{{Role: "system", Content: systemPrompt}}
+	if page != "" {
+		messages = append(messages, llm.Message{
+			Role:    "system",
+			Content: "The user is viewing this page:\n" + page,
+		})
+	}
+	messages = append(messages, llm.Message{Role: "user", Content: content})
+
+	answer, err := h.llm.Complete(ctx, messages)
 	if err != nil {
 		h.log.Warn("llm complete failed", zap.Error(err))
 		h.hub.Publish(session, stream.Event{Type: "error", ID: id, Content: "Charli could not answer right now."})
