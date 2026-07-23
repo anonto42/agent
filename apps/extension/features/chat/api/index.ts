@@ -20,6 +20,16 @@ export async function confirmAction(id: string, approved: boolean): Promise<void
   await charliStream.confirm(id, approved);
 }
 
+/** Reports whether an executed action succeeded, continuing the agent loop (L3). */
+export async function observeAction(id: string, success: boolean, detail = ''): Promise<void> {
+  await charliStream.observe(id, success, detail);
+}
+
+/** Stops an in-progress multi-step task (L3 kill switch). */
+export async function interruptTask(id: string): Promise<void> {
+  await charliStream.interrupt(id);
+}
+
 /** Subscribes to every event on this session's stream. Returns an unsubscribe fn. */
 export function onChatEvent(listener: (event: ChatEvent) => void): () => void {
   return charliStream.onEvent(listener);

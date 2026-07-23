@@ -1,7 +1,9 @@
 // Package interfaces exposes the chat module's HTTP surface:
-//   - GET  /events   an SSE stream the client subscribes to (server -> client)
-//   - POST /chat     send a user message            (client -> server)
-//   - POST /confirm  approve/reject a proposed action (client -> server)
+//   - GET  /events    an SSE stream the client subscribes to (server -> client)
+//   - POST /chat      send a user message            (client -> server)
+//   - POST /confirm   approve/reject a proposed action (client -> server)
+//   - POST /observe   report an executed action's result, continuing the loop (L3)
+//   - POST /interrupt stop an in-progress multi-step task (L3 kill switch)
 //
 // Handlers only validate input and delegate to application.Service; they hold
 // no business logic themselves.
@@ -17,8 +19,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/levelaxis/charli/backend/internal/modules/chat/application"
+	"github.com/levelaxis/charli/backend/internal/safety"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/stream"
+	"github.com/levelaxis/charli/backend/internal/tools"
 	"github.com/levelaxis/charli/backend/pkg/response"
 )
 
@@ -29,8 +33,8 @@ type Handler struct {
 }
 
 // NewHandler constructs the chat handler.
-func NewHandler(hub *stream.Hub, client llm.Client, log *zap.Logger) *Handler {
-	return &Handler{hub: hub, svc: application.NewService(client, log)}
+func NewHandler(hub *stream.Hub, client llm.Client, log *zap.Logger, registry *tools.Registry, safetyEngine *safety.Engine) *Handler {
+	return &Handler{hub: hub, svc: application.NewService(client, log, registry, safetyEngine)}
 }
 
 // Events opens a Server-Sent Events stream for a session. The client keeps it
@@ -92,7 +96,9 @@ func (h *Handler) Send(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		event := h.svc.Reply(ctx, req.Session, req.ID, req.Content, req.Page)
-		h.hub.Publish(req.Session, event)
+		if event.Type != "" {
+			h.hub.Publish(req.Session, event)
+		}
 	}()
 	response.OK(c, "accepted", nil)
 }
@@ -116,6 +122,65 @@ func (h *Handler) Confirm(c *gin.Context) {
 	event, found := h.svc.Confirm(req.Session, req.ID, req.Approved)
 	if !found {
 		response.Error(c, http.StatusNotFound, "no pending action for that id", nil)
+		return
+	}
+
+	h.hub.Publish(req.Session, event)
+	response.OK(c, "accepted", nil)
+}
+
+// observeRequest is the POST /observe body. Mirrors contracts.ObserveRequest.
+type observeRequest struct {
+	Session string `json:"session" binding:"required"`
+	ID      string `json:"id" binding:"required"`
+	Success bool   `json:"success"`
+	Detail  string `json:"detail"`
+}
+
+// Observe reports whether a previously executed action succeeded and
+// continues the agent loop (L3): the next turn (another proposed action, or
+// a final answer) arrives asynchronously on the session's SSE stream.
+func (h *Handler) Observe(c *gin.Context) {
+	var req observeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		return
+	}
+
+	if !h.svc.HasTask(req.Session, req.ID) {
+		response.Error(c, http.StatusNotFound, "no in-progress task for that id", nil)
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		event := h.svc.Observe(ctx, req.Session, req.ID, req.Success, req.Detail)
+		if event.Type != "" {
+			h.hub.Publish(req.Session, event)
+		}
+	}()
+	response.OK(c, "accepted", nil)
+}
+
+// interruptRequest is the POST /interrupt body. Mirrors contracts.InterruptRequest.
+type interruptRequest struct {
+	Session string `json:"session" binding:"required"`
+	ID      string `json:"id" binding:"required"`
+}
+
+// Interrupt is the user's kill switch: it stops an in-progress multi-step
+// task. The "interrupted" outcome arrives on the session's SSE stream.
+func (h *Handler) Interrupt(c *gin.Context) {
+	var req interruptRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		return
+	}
+
+	event, found := h.svc.Interrupt(req.Session, req.ID)
+	if !found {
+		response.Error(c, http.StatusNotFound, "no in-progress task for that id", nil)
 		return
 	}
 

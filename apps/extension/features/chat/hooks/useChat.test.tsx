@@ -8,17 +8,21 @@ vi.mock('../api', () => ({
   nextId: vi.fn(),
   sendChat: vi.fn(),
   confirmAction: vi.fn(),
+  observeAction: vi.fn(),
+  interruptTask: vi.fn(),
   onChatEvent: vi.fn(),
 }));
 vi.mock('@shared/lib', () => ({ performAction: vi.fn() }));
 
-import { nextId, sendChat, confirmAction, onChatEvent } from '../api';
+import { nextId, sendChat, confirmAction, observeAction, interruptTask, onChatEvent } from '../api';
 import { performAction } from '@shared/lib';
 import { useChat } from './useChat';
 
 const mockedNextId = vi.mocked(nextId);
 const mockedSendChat = vi.mocked(sendChat);
 const mockedConfirmAction = vi.mocked(confirmAction);
+const mockedObserveAction = vi.mocked(observeAction);
+const mockedInterruptTask = vi.mocked(interruptTask);
 const mockedOnChatEvent = vi.mocked(onChatEvent);
 const mockedPerformAction = vi.mocked(performAction);
 
@@ -29,6 +33,8 @@ describe('useChat', () => {
     mockedNextId.mockReset().mockReturnValue('id-1');
     mockedSendChat.mockReset().mockResolvedValue(undefined);
     mockedConfirmAction.mockReset().mockResolvedValue(undefined);
+    mockedObserveAction.mockReset().mockResolvedValue(undefined);
+    mockedInterruptTask.mockReset().mockResolvedValue(undefined);
     mockedPerformAction.mockReset().mockResolvedValue(true);
     mockedOnChatEvent.mockReset().mockImplementation((listener) => {
       emit = listener;
@@ -78,7 +84,7 @@ describe('useChat', () => {
     expect(mockedSendChat).not.toHaveBeenCalled();
   });
 
-  it('surfaces a proposed action from an "action" event and clears it on approve+execute', async () => {
+  it('surfaces a proposed action from an "action" event, executes on approve, and reports the outcome back', async () => {
     const { result } = renderHook(() => useChat());
     act(() => result.current.setInput('click submit'));
     await act(async () => {
@@ -113,6 +119,43 @@ describe('useChat', () => {
     await waitFor(() =>
       expect(result.current.messages.at(-1)).toEqual({ role: 'assistant', content: '✓ Done.' }),
     );
+    // L3: the extension must tell the backend the action succeeded so the
+    // loop can decide its next step.
+    await waitFor(() => expect(mockedObserveAction).toHaveBeenCalledWith('id-1', true, ''));
+    // The task is still going (waiting on the backend's next turn) — the
+    // composer must stay disabled rather than re-enabling between turns.
+    expect(result.current.sending).toBe(true);
+  });
+
+  it('continues a multi-step task across several turns before finishing', async () => {
+    const { result } = renderHook(() => useChat());
+    act(() => result.current.setInput('do a two-step task'));
+    await act(async () => {
+      await result.current.send();
+    });
+
+    // Turn 1: propose -> approve -> execute -> observe.
+    act(() =>
+      emit({ type: 'action', id: 'id-1', content: 'Step 1?', action: { kind: 'click', target: 'Next' } }),
+    );
+    await act(async () => {
+      await result.current.respondToAction(true);
+    });
+    act(() => emit({ type: 'execute', id: 'id-1', content: '', action: { kind: 'click', target: 'Next' } }));
+    await waitFor(() => expect(mockedObserveAction).toHaveBeenCalledTimes(1));
+    expect(result.current.sending).toBe(true);
+
+    // Turn 2: the backend proposes another step off the same task id.
+    act(() =>
+      emit({ type: 'action', id: 'id-1', content: 'Step 2?', action: { kind: 'click', target: 'Finish' } }),
+    );
+    await waitFor(() => expect(result.current.pendingAction?.message).toBe('Step 2?'));
+    expect(result.current.sending).toBe(true);
+
+    // The task ends only once a terminal event arrives.
+    act(() => emit({ type: 'chat', id: 'id-1', content: 'All done.' }));
+    await waitFor(() => expect(result.current.sending).toBe(false));
+    expect(result.current.messages.at(-1)).toEqual({ role: 'assistant', content: 'All done.' });
   });
 
   it('clears the pending action and shows a message on "cancelled"', async () => {
@@ -133,5 +176,24 @@ describe('useChat', () => {
 
     await waitFor(() => expect(result.current.pendingAction).toBeNull());
     expect(result.current.messages.at(-1)).toEqual({ role: 'assistant', content: 'Cancelled.' });
+  });
+
+  it('stop() interrupts the in-progress task, and "interrupted" ends it', async () => {
+    const { result } = renderHook(() => useChat());
+    act(() => result.current.setInput('do something long'));
+    await act(async () => {
+      await result.current.send();
+    });
+    expect(result.current.sending).toBe(true);
+
+    await act(async () => {
+      await result.current.stop();
+    });
+    expect(mockedInterruptTask).toHaveBeenCalledWith('id-1');
+
+    act(() => emit({ type: 'interrupted', id: 'id-1', content: 'Stopped.' }));
+
+    await waitFor(() => expect(result.current.sending).toBe(false));
+    expect(result.current.messages.at(-1)).toEqual({ role: 'assistant', content: 'Stopped.' });
   });
 });

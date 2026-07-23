@@ -1,4 +1,4 @@
-import type { ChatEvent, ChatRequest, ConfirmRequest } from '@charli/shared';
+import type { ChatEvent, ChatRequest, ConfirmRequest, ObserveRequest, InterruptRequest } from '@charli/shared';
 
 // Realtime client for the Go backend: an SSE stream for messages coming DOWN
 // (server -> client) and POST /chat + POST /confirm for messages going UP
@@ -67,6 +67,30 @@ class CharliStream {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`confirm failed (${res.status})`);
+  }
+
+  /** Reports whether an executed action succeeded, continuing the agent loop (L3). */
+  async observe(id: string, success: boolean, detail: string): Promise<void> {
+    await this.connect();
+    const body: ObserveRequest = { session: this.session, id, success, detail };
+    const res = await fetch(`${BASE}/observe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`observe failed (${res.status})`);
+  }
+
+  /** Stops an in-progress multi-step task (L3 kill switch). */
+  async interrupt(id: string): Promise<void> {
+    await this.connect();
+    const body: InterruptRequest = { session: this.session, id };
+    const res = await fetch(`${BASE}/interrupt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`interrupt failed (${res.status})`);
   }
 }
 

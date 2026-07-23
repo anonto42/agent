@@ -8,10 +8,12 @@ import (
 
 	chat "github.com/levelaxis/charli/backend/internal/modules/chat/interfaces"
 	health "github.com/levelaxis/charli/backend/internal/modules/health/interfaces"
+	"github.com/levelaxis/charli/backend/internal/safety"
 	"github.com/levelaxis/charli/backend/internal/shared/config"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/shared/middleware"
 	"github.com/levelaxis/charli/backend/internal/stream"
+	"github.com/levelaxis/charli/backend/internal/tools"
 )
 
 // App holds the top-level application dependencies.
@@ -36,7 +38,9 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 	// Realtime chat over SSE (stream down) + POST (send up), answered by the LLM.
 	hub := stream.NewHub()
 	llmClient := llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel)
-	chat.RegisterRoutes(api, chat.NewHandler(hub, llmClient, log))
+	registry := tools.Default()
+	safetyEngine := safety.NewEngine(registry)
+	chat.RegisterRoutes(api, chat.NewHandler(hub, llmClient, log, registry, safetyEngine))
 
 	return &App{Config: cfg, Logger: log, Engine: engine}
 }

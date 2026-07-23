@@ -6,6 +6,7 @@ package safety
 import (
 	"strings"
 
+	"github.com/levelaxis/charli/backend/internal/tools"
 	"github.com/levelaxis/charli/contracts"
 )
 
@@ -29,20 +30,35 @@ type Decision struct {
 	Reason  string // set when Allowed is false
 }
 
+// Engine evaluates proposed actions against the tool registry and Charli's
+// content policy.
+type Engine struct {
+	registry *tools.Registry
+}
+
+// NewEngine builds an Engine backed by the given tool registry.
+func NewEngine(registry *tools.Registry) *Engine {
+	return &Engine{registry: registry}
+}
+
 // Evaluate decides whether a proposed action may even be shown to the user for
 // confirmation. L2 v1 policy: every action requires user confirmation (nothing
 // auto-executes yet); this function only handles the hard "never" cases.
-func Evaluate(action contracts.Action) Decision {
+func (e *Engine) Evaluate(action contracts.Action) Decision {
+	tool, ok := e.registry.Lookup(action.Kind)
+	if !ok {
+		return Decision{Allowed: false, Reason: "unknown action kind"}
+	}
+	if err := tool.Validate(action); err != nil {
+		return Decision{Allowed: false, Reason: err.Error()}
+	}
+
 	haystack := strings.ToLower(action.Target + " " + action.Value)
 	for _, term := range blockedTerms {
 		if strings.Contains(haystack, term) {
 			return Decision{Allowed: false, Reason: "this looks like a sensitive field (" + term + "); Charli won't touch it"}
 		}
 	}
-	switch action.Kind {
-	case "fill", "click":
-		return Decision{Allowed: true}
-	default:
-		return Decision{Allowed: false, Reason: "unknown action kind"}
-	}
+
+	return Decision{Allowed: true}
 }

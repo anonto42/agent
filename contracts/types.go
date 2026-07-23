@@ -42,11 +42,12 @@ type Action struct {
 
 // ChatEvent is a message pushed down the SSE stream (server -> client).
 //
-//	type "chat"      a normal assistant answer (content)
-//	type "error"     something went wrong (content)
-//	type "action"    Charli proposes an action needing confirmation (action set)
-//	type "execute"   an approved action to perform on the page (action set)
-//	type "cancelled" a rejected action
+//	type "chat"        a normal assistant answer (content)
+//	type "error"       something went wrong (content)
+//	type "action"      Charli proposes an action needing confirmation (action set)
+//	type "execute"     an approved action to perform on the page (action set)
+//	type "cancelled"   a rejected action
+//	type "interrupted" the user stopped an in-progress multi-step task (L3)
 type ChatEvent struct {
 	Type    string  `json:"type"`
 	ID      string  `json:"id"` // matches the ChatRequest.ID it answers
@@ -60,4 +61,21 @@ type ConfirmRequest struct {
 	Session  string `json:"session"`
 	ID       string `json:"id"`
 	Approved bool   `json:"approved"`
+}
+
+// ObserveRequest is the POST /observe body (L3): whether an approved action
+// actually succeeded when performed on the page, so the agent loop can
+// decide its next step (client -> server).
+type ObserveRequest struct {
+	Session string `json:"session"`
+	ID      string `json:"id"`
+	Success bool   `json:"success"`
+	Detail  string `json:"detail,omitempty"` // e.g. why it failed
+}
+
+// InterruptRequest is the POST /interrupt body (L3): the user's kill switch,
+// stopping any in-progress multi-step task (client -> server).
+type InterruptRequest struct {
+	Session string `json:"session"`
+	ID      string `json:"id"`
 }

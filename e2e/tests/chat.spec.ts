@@ -34,9 +34,12 @@ test('page perception: the active page text reaches the model', async ({ page })
   await expect(page.getByText(/platypus/)).toBeVisible({ timeout: 20_000 });
 });
 
-// L2: the model proposes an action, the panel shows Approve/Reject, and
-// approving drives confirm -> execute -> the DOM action actually running.
-test('action loop: propose -> approve -> execute performs the DOM action', async ({ page }) => {
+// L2/L3: the model proposes an action, the panel shows Approve/Reject, and
+// approving drives confirm -> execute -> the DOM action actually running ->
+// observe -> the loop continues to a final answer instead of stopping dead
+// after "execute" (proving L3's propose/confirm/execute/observe cycle, not
+// just a one-shot L2 exchange).
+test('action loop: propose -> approve -> execute -> observe -> final answer', async ({ page }) => {
   await page.addInitScript(() => {
     // @ts-expect-error minimal stub of the chrome extension API
     window.chrome = {
@@ -58,6 +61,13 @@ test('action loop: propose -> approve -> execute performs the DOM action', async
   // Approving -> POST /confirm -> "execute" event -> performAction (stubbed
   // true) -> the panel reports success.
   await expect(page.getByText('✓ Done.')).toBeVisible({ timeout: 20_000 });
+
+  // -> POST /observe -> the backend's loop takes one more turn -> a final
+  // plain-text "chat" event, proving the task actually continued after
+  // execute rather than ending there.
+  await expect(page.getByText('All done — I clicked the Submit button for you.')).toBeVisible({
+    timeout: 20_000,
+  });
 });
 
 // L2 (reject path): rejecting must cancel, and nothing should be performed.

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useChat } from '../hooks/useChat';
 import { ChatMessages } from './ChatMessages';
@@ -7,8 +8,20 @@ import { ActionConfirm } from './ActionConfirm';
 // Container: delegates state to useChat and composes presentational children.
 // (The clean container-hook pattern from omni.dns.)
 export function ChatApp() {
-  const { messages, input, setInput, sending, error, send, pendingAction, confirming, respondToAction } =
+  const { messages, input, setInput, sending, error, send, pendingAction, confirming, respondToAction, stop } =
     useChat();
+
+  // The Esc kill switch (agent-safety.md): stops an in-progress task from
+  // anywhere in the panel, not just via the Stop button.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && sending) {
+        void stop();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [sending, stop]);
 
   return (
     <div className="flex h-screen flex-col bg-white text-slate-800">
@@ -37,8 +50,10 @@ export function ChatApp() {
         <ChatComposer
           value={input}
           disabled={sending || Boolean(pendingAction)}
+          working={sending}
           onChange={setInput}
           onSend={send}
+          onStop={stop}
         />
       </div>
     </div>
