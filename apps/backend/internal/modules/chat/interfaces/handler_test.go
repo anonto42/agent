@@ -96,7 +96,89 @@ func TestChatRoundTripSSE(t *testing.T) {
 	}
 	_ = pr.Body.Close()
 
-	// Read the stream until the model's reply arrives.
+	e := readNextEvent(t, reader)
+	if e.ID != "1" || e.Content != "hello from charli" {
+		t.Fatalf("unexpected event: %+v", e)
+	}
+}
+
+// TestActionProposalAndConfirm exercises the full L2 loop over real HTTP + SSE:
+// the model proposes an action -> client sees "action" -> confirms -> client
+// sees "execute" with the same action.
+func TestActionProposalAndConfirm(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	hub := stream.NewHub()
+	reply := `{"action":{"kind":"click","target":"Submit"},"message":"Click submit?"}`
+	engine := gin.New()
+	RegisterRoutes(engine.Group("/api/v1"), NewHandler(hub, fakeLLM{reply: reply}, zap.NewNop()))
+
+	srv := httptest.NewServer(engine)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/v1/events?session=s1")
+	if err != nil {
+		t.Fatalf("open sse: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	reader := bufio.NewReader(resp.Body)
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("read connect line: %v", err)
+	}
+
+	body := `{"session":"s1","id":"1","content":"click submit"}`
+	pr, err := http.Post(srv.URL+"/api/v1/chat", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("post chat: %v", err)
+	}
+	_ = pr.Body.Close()
+
+	proposed := readNextEvent(t, reader)
+	if proposed.Type != "action" || proposed.Action == nil || proposed.Action.Kind != "click" {
+		t.Fatalf("expected a proposed click action, got %+v", proposed)
+	}
+
+	confirmBody := `{"session":"s1","id":"1","approved":true}`
+	cr, err := http.Post(srv.URL+"/api/v1/confirm", "application/json", strings.NewReader(confirmBody))
+	if err != nil {
+		t.Fatalf("post confirm: %v", err)
+	}
+	if cr.StatusCode != http.StatusOK {
+		t.Fatalf("confirm status: %d", cr.StatusCode)
+	}
+	_ = cr.Body.Close()
+
+	executed := readNextEvent(t, reader)
+	if executed.Type != "execute" || executed.Action == nil || executed.Action.Target != "Submit" {
+		t.Fatalf("expected an execute event for Submit, got %+v", executed)
+	}
+}
+
+// TestConfirmUnknownIDReturns404 checks that confirming a never-proposed (or
+// already-resolved) id is rejected rather than silently accepted.
+func TestConfirmUnknownIDReturns404(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	hub := stream.NewHub()
+	engine := gin.New()
+	RegisterRoutes(engine.Group("/api/v1"), NewHandler(hub, fakeLLM{reply: "n/a"}, zap.NewNop()))
+
+	srv := httptest.NewServer(engine)
+	defer srv.Close()
+
+	body := `{"session":"s1","id":"does-not-exist","approved":true}`
+	resp, err := http.Post(srv.URL+"/api/v1/confirm", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("post confirm: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+// readNextEvent reads SSE lines until it finds the next `data:` payload and
+// decodes it as a stream.Event.
+func readNextEvent(t *testing.T, reader *bufio.Reader) stream.Event {
+	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		line, err := reader.ReadString('\n')
@@ -112,10 +194,8 @@ func TestChatRoundTripSSE(t *testing.T) {
 		if err := json.Unmarshal([]byte(payload), &e); err != nil {
 			t.Fatalf("bad event json %q: %v", line, err)
 		}
-		if e.ID == "1" && e.Content == "hello from charli" {
-			return // success: the (faked) model reply streamed back
-		}
-		t.Fatalf("unexpected event: %+v", e)
+		return e
 	}
 	t.Fatal("timed out waiting for SSE event")
+	return stream.Event{}
 }

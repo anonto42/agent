@@ -2,15 +2,16 @@
 // clients over Server-Sent Events (SSE). One channel per session.
 package stream
 
-import "sync"
+import (
+	"sync"
 
-// Event is a single message pushed down a client's stream.
-// Mirrors contracts.ChatEvent (the shared source of truth → generated TS).
-type Event struct {
-	Type    string `json:"type"`
-	ID      string `json:"id"`
-	Content string `json:"content"`
-}
+	"github.com/levelaxis/charli/contracts"
+)
+
+// Event is a single message pushed down a client's stream — the same shape the
+// extension receives, so this is a type alias to the shared contract (the
+// single source of truth), not a hand-copied struct.
+type Event = contracts.ChatEvent
 
 // Hub tracks active client sessions and fans events out to them.
 type Hub struct {

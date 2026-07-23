@@ -44,8 +44,9 @@ moon run extension:dev      # WXT dev (load unpacked in the browser)
 moon run website:dev        # Next.js console         -> http://localhost:3000
 
 moon run :build             # build everything (cached)
-moon run :test              # test everything (cached)
+moon run :test              # unit tests everywhere (cached)
 moon run :check             # vet (Go) + typecheck (TS)
+moon run :e2e                # full end-to-end (mock LLM + real backend + real panel)
 
 moon run contracts:generate # regenerate shared TS types from contracts/types.go
 ```
@@ -54,4 +55,7 @@ moon run contracts:generate # regenerate shared TS types from contracts/types.go
 
 L0 inline assist → L1 page understanding → L2 single actions → L3 multi-step
 tasks → L4 cross-app workflows. Start at L0–L1; each phase is a usable product.
-# agent
+
+Current: **L0 (chat) ✅ · L1 (page perception) ✅ · L2 (single actions, gated by
+confirmation) ✅** — Charli can propose filling a field or clicking something,
+but nothing runs until you approve it.

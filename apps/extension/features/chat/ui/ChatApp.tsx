@@ -2,11 +2,13 @@ import { Sparkles } from 'lucide-react';
 import { useChat } from '../hooks/useChat';
 import { ChatMessages } from './ChatMessages';
 import { ChatComposer } from './ChatComposer';
+import { ActionConfirm } from './ActionConfirm';
 
 // Container: delegates state to useChat and composes presentational children.
 // (The clean container-hook pattern from omni.dns.)
 export function ChatApp() {
-  const { messages, input, setInput, sending, error, send } = useChat();
+  const { messages, input, setInput, sending, error, send, pendingAction, confirming, respondToAction } =
+    useChat();
 
   return (
     <div className="flex h-screen flex-col bg-white text-slate-800">
@@ -17,14 +19,27 @@ export function ChatApp() {
         <h1 className="text-sm font-semibold">Charli</h1>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
         <ChatMessages messages={messages} />
+        {pendingAction && (
+          <ActionConfirm
+            action={pendingAction.action}
+            disabled={confirming}
+            onApprove={() => respondToAction(true)}
+            onReject={() => respondToAction(false)}
+          />
+        )}
       </div>
 
       {error && <p className="px-4 pb-2 text-xs text-red-500">{error}</p>}
 
       <div className="border-t border-slate-200 p-3">
-        <ChatComposer value={input} disabled={sending} onChange={setInput} onSend={send} />
+        <ChatComposer
+          value={input}
+          disabled={sending || Boolean(pendingAction)}
+          onChange={setInput}
+          onSend={send}
+        />
       </div>
     </div>
   );

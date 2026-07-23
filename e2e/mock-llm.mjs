@@ -1,8 +1,10 @@
 // A deterministic stand-in for the LLM provider (OpenAI-compatible), so the E2E
 // runs offline with no API key. The backend points its LLM client here.
 //
-// If the request carries page context (L1), the reply echoes it back so the
-// test can prove the page text made it all the way to the model.
+// - If the request carries page context (L1), the reply echoes it back so the
+//   test can prove the page text made it all the way to the model.
+// - If the user's message mentions "click", the reply proposes a click action
+//   (L2), so the test can drive the full propose -> confirm -> execute loop.
 import { createServer } from 'node:http';
 
 const PORT = 8099;
@@ -14,17 +16,26 @@ createServer((req, res) => {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
-      let seen = '';
+      let content = REPLY;
       try {
         const { messages = [] } = JSON.parse(body);
-        const m = messages.find(
+        const pageMsg = messages.find(
           (x) => typeof x.content === 'string' && x.content.includes(PAGE_MARKER),
         );
-        if (m) seen = m.content.slice(m.content.indexOf(PAGE_MARKER) + PAGE_MARKER.length).trim();
+        const userMsg = messages.find((x) => x.role === 'user');
+
+        if (userMsg && /click/i.test(userMsg.content)) {
+          content = JSON.stringify({
+            action: { kind: 'click', target: 'Submit' },
+            message: 'Click the Submit button?',
+          });
+        } else if (pageMsg) {
+          const seen = pageMsg.content.slice(pageMsg.content.indexOf(PAGE_MARKER) + PAGE_MARKER.length).trim();
+          content = `PAGE_SEEN: ${seen}`;
+        }
       } catch {
-        // ignore malformed bodies
+        // ignore malformed bodies, fall back to the default reply
       }
-      const content = seen ? `PAGE_SEEN: ${seen}` : REPLY;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));
     });

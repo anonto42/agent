@@ -1,21 +1,25 @@
-import type { ChatEvent, ChatRequest } from '@charli/shared';
+import type { ChatEvent, ChatRequest, ConfirmRequest } from '@charli/shared';
 
 // Realtime client for the Go backend: an SSE stream for messages coming DOWN
-// (server -> client) and POST /chat for messages going UP (client -> server),
-// correlated by message id. Message shapes come from the shared contract.
+// (server -> client) and POST /chat + POST /confirm for messages going UP
+// (client -> server). Message shapes come from the shared contract.
+//
+// One user message can produce MORE THAN ONE event over time (an "action"
+// proposal, then later an "execute"/"cancelled" once confirmed) — so this is a
+// plain pub/sub, not a one-shot request/response promise. Callers match events
+// to their own request by `id`.
 //
 // Phase 0 note: the side panel connects directly. When content scripts also
 // need the backend (L1+), this moves into the background service worker and the
 // panel talks to it via runtime messaging.
 
 const BASE = 'http://localhost:8080/api/v1';
-const TIMEOUT_MS = 10_000;
 
 class CharliStream {
   private es: EventSource | null = null;
   private ready: Promise<void> | null = null;
   private readonly session = crypto.randomUUID();
-  private pending = new Map<string, (event: ChatEvent) => void>();
+  private listeners = new Set<(event: ChatEvent) => void>();
 
   // Opens the SSE stream once and resolves when it is connected (so the
   // server-side subscription exists before we POST).
@@ -28,11 +32,7 @@ class CharliStream {
       es.onopen = () => resolve();
       es.onmessage = (ev) => {
         const event = JSON.parse(ev.data as string) as ChatEvent;
-        const resolvePending = this.pending.get(event.id);
-        if (resolvePending) {
-          this.pending.delete(event.id);
-          resolvePending(event);
-        }
+        for (const listener of this.listeners) listener(event);
       };
       // EventSource reconnects automatically on error; nothing to do here.
       this.es = es;
@@ -40,37 +40,33 @@ class CharliStream {
     return this.ready;
   }
 
-  async send(message: ChatEvent, page = ''): Promise<ChatEvent> {
+  /** Subscribes to every event on this session's stream. Returns an unsubscribe fn. */
+  onEvent(listener: (event: ChatEvent) => void): () => void {
+    this.listeners.add(listener);
+    void this.connect();
+    return () => this.listeners.delete(listener);
+  }
+
+  async post(id: string, content: string, page: string): Promise<void> {
     await this.connect();
-
-    return new Promise<ChatEvent>((resolve, reject) => {
-      this.pending.set(message.id, resolve);
-
-      const timer = setTimeout(() => {
-        if (this.pending.delete(message.id)) reject(new Error('Charli did not respond'));
-      }, TIMEOUT_MS);
-
-      const body: ChatRequest = {
-        session: this.session,
-        id: message.id,
-        content: message.content,
-        page,
-      };
-
-      fetch(`${BASE}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error(`chat failed (${res.status})`);
-        })
-        .catch((err) => {
-          clearTimeout(timer);
-          this.pending.delete(message.id);
-          reject(err instanceof Error ? err : new Error('send failed'));
-        });
+    const body: ChatRequest = { session: this.session, id, content, page };
+    const res = await fetch(`${BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
+    if (!res.ok) throw new Error(`chat failed (${res.status})`);
+  }
+
+  async confirm(id: string, approved: boolean): Promise<void> {
+    await this.connect();
+    const body: ConfirmRequest = { session: this.session, id, approved };
+    const res = await fetch(`${BASE}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`confirm failed (${res.status})`);
   }
 }
 

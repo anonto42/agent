@@ -32,9 +32,32 @@ type ChatRequest struct {
 	Page    string `json:"page,omitempty"` // text of the page the user is viewing (L1)
 }
 
+// Action is something Charli proposes to do on the page (L2). The model selects
+// it; the backend safety engine decides whether it runs.
+type Action struct {
+	Kind   string `json:"kind"`             // "fill" | "click"
+	Value  string `json:"value,omitempty"`  // text to type (fill)
+	Target string `json:"target,omitempty"` // button/link text to click (click)
+}
+
 // ChatEvent is a message pushed down the SSE stream (server -> client).
+//
+//	type "chat"      a normal assistant answer (content)
+//	type "error"     something went wrong (content)
+//	type "action"    Charli proposes an action needing confirmation (action set)
+//	type "execute"   an approved action to perform on the page (action set)
+//	type "cancelled" a rejected action
 type ChatEvent struct {
-	Type    string `json:"type"`    // "chat" | "error"
-	ID      string `json:"id"`      // matches the ChatRequest.ID it answers
-	Content string `json:"content"`
+	Type    string  `json:"type"`
+	ID      string  `json:"id"` // matches the ChatRequest.ID it answers
+	Content string  `json:"content"`
+	Action  *Action `json:"action,omitempty"`
+}
+
+// ConfirmRequest is the POST /confirm body: the user's decision on a proposed
+// action (client -> server).
+type ConfirmRequest struct {
+	Session  string `json:"session"`
+	ID       string `json:"id"`
+	Approved bool   `json:"approved"`
 }

@@ -38,10 +38,34 @@ export interface ChatRequest {
   page?: string; // text of the page the user is viewing (L1)
 }
 /**
+ * Action is something Charli proposes to do on the page (L2). The model selects
+ * it; the backend safety engine decides whether it runs.
+ */
+export interface Action {
+  kind: string; // "fill" | "click"
+  value?: string; // text to type (fill)
+  target?: string; // button/link text to click (click)
+}
+/**
  * ChatEvent is a message pushed down the SSE stream (server -> client).
+ * 	type "chat"      a normal assistant answer (content)
+ * 	type "error"     something went wrong (content)
+ * 	type "action"    Charli proposes an action needing confirmation (action set)
+ * 	type "execute"   an approved action to perform on the page (action set)
+ * 	type "cancelled" a rejected action
  */
 export interface ChatEvent {
-  type: string; // "chat" | "error"
+  type: string;
   id: string; // matches the ChatRequest.ID it answers
   content: string;
+  action?: Action;
+}
+/**
+ * ConfirmRequest is the POST /confirm body: the user's decision on a proposed
+ * action (client -> server).
+ */
+export interface ConfirmRequest {
+  session: string;
+  id: string;
+  approved: boolean;
 }

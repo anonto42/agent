@@ -30,10 +30,13 @@ internal/
 pkg/                     reusable, domain-free: response, logger, jwt, pagination
 ```
 
-Charli modules: `chat` (SSE `/events` + POST `/chat`), later `agent` (the ReAct
-loop), `tools` (skill registry), `audit`. Cross-cutting: `safety` (policy
-engine) and the `llm` client live in `shared/infrastructure`; `health` is the
-reference module.
+Charli modules: `chat` (SSE `/events`, POST `/chat`, POST `/confirm`) — its
+`application/service.go` builds the prompt, parses a proposed action out of the
+model's reply, and tracks pending confirmations; `internal/safety` is the
+policy engine (final say on whether a proposed action may even be shown to the
+user). Later: `agent` (the full ReAct loop), `tools` (skill registry), `audit`
+(persisted, not just logged). `health` is the reference module; the `llm`
+client lives in `shared/infrastructure`.
 
 ## Defaults
 

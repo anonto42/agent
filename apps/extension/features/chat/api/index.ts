@@ -1,15 +1,26 @@
-import type { ChatMessage } from '@charli/shared';
+import type { ChatEvent } from '@charli/shared';
 import { charliStream } from '@shared/api/stream';
 import { readActivePageText } from '@shared/lib';
 
 let counter = 0;
 
-// Sends a user message to Charli, along with the text of the page the user is
-// currently viewing (L1 perception), and resolves the reply from the SSE stream.
-export async function sendChat(history: ChatMessage[], text: string): Promise<string> {
-  void history; // full history goes to the agent loop in a later phase
+/** Generates a fresh id used to correlate a sent message with its events. */
+export function nextId(): string {
+  return `m${Date.now()}-${counter++}`;
+}
+
+/** Sends a user message, along with the active tab's text (L1 perception). */
+export async function sendChat(id: string, content: string): Promise<void> {
   const page = await readActivePageText();
-  const id = `m${Date.now()}-${counter++}`;
-  const reply = await charliStream.send({ type: 'chat', id, content: text }, page);
-  return reply.content;
+  await charliStream.post(id, content, page);
+}
+
+/** Approves or rejects a previously proposed action (L2). */
+export async function confirmAction(id: string, approved: boolean): Promise<void> {
+  await charliStream.confirm(id, approved);
+}
+
+/** Subscribes to every event on this session's stream. Returns an unsubscribe fn. */
+export function onChatEvent(listener: (event: ChatEvent) => void): () => void {
+  return charliStream.onEvent(listener);
 }

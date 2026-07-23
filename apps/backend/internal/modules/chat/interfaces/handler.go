@@ -1,8 +1,10 @@
 // Package interfaces exposes the chat module's HTTP surface:
-//   - GET  /events  an SSE stream the client subscribes to (server -> client)
-//   - POST /chat    send a user message           (client -> server)
+//   - GET  /events   an SSE stream the client subscribes to (server -> client)
+//   - POST /chat     send a user message            (client -> server)
+//   - POST /confirm  approve/reject a proposed action (client -> server)
 //
-// Together they give bidirectional realtime chat over plain HTTP.
+// Handlers only validate input and delegate to application.Service; they hold
+// no business logic themselves.
 package interfaces
 
 import (
@@ -14,27 +16,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/levelaxis/charli/backend/internal/modules/chat/application"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/stream"
 	"github.com/levelaxis/charli/backend/pkg/response"
 )
 
-const systemPrompt = "You are Charli, a helpful, concise browser assistant."
-
-// Handler serves the chat SSE stream and the message endpoint.
+// Handler serves the chat SSE stream and the message/confirm endpoints.
 type Handler struct {
 	hub *stream.Hub
-	llm llm.Client
-	log *zap.Logger
+	svc *application.Service
 }
 
 // NewHandler constructs the chat handler.
 func NewHandler(hub *stream.Hub, client llm.Client, log *zap.Logger) *Handler {
-	return &Handler{hub: hub, llm: client, log: log}
+	return &Handler{hub: hub, svc: application.NewService(client, log)}
 }
 
 // Events opens a Server-Sent Events stream for a session. The client keeps it
-// open; the server pushes assistant replies (and, later, agent steps) down it.
+// open; the server pushes assistant replies and proposed/executed actions down it.
 func (h *Handler) Events(c *gin.Context) {
 	session := c.Query("session")
 	if session == "" {
@@ -79,7 +79,8 @@ type sendRequest struct {
 }
 
 // Send accepts a user message, acknowledges immediately, and produces the
-// model's reply asynchronously — it arrives on the session's SSE stream.
+// model's reply asynchronously — it arrives on the session's SSE stream, either
+// as a normal answer or a proposed action awaiting confirmation.
 func (h *Handler) Send(c *gin.Context) {
 	var req sendRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -87,30 +88,37 @@ func (h *Handler) Send(c *gin.Context) {
 		return
 	}
 
-	go h.reply(req.Session, req.ID, req.Content, req.Page)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		event := h.svc.Reply(ctx, req.Session, req.ID, req.Content, req.Page)
+		h.hub.Publish(req.Session, event)
+	}()
 	response.OK(c, "accepted", nil)
 }
 
-// reply calls the model and pushes the answer (or an error event) to the
-// session's stream. Runs on its own goroutine, off the request context.
-func (h *Handler) reply(session, id, content, page string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+// confirmRequest is the POST /confirm body. Mirrors contracts.ConfirmRequest.
+type confirmRequest struct {
+	Session  string `json:"session" binding:"required"`
+	ID       string `json:"id" binding:"required"`
+	Approved bool   `json:"approved"`
+}
 
-	messages := []llm.Message{{Role: "system", Content: systemPrompt}}
-	if page != "" {
-		messages = append(messages, llm.Message{
-			Role:    "system",
-			Content: "The user is viewing this page:\n" + page,
-		})
-	}
-	messages = append(messages, llm.Message{Role: "user", Content: content})
-
-	answer, err := h.llm.Complete(ctx, messages)
-	if err != nil {
-		h.log.Warn("llm complete failed", zap.Error(err))
-		h.hub.Publish(session, stream.Event{Type: "error", ID: id, Content: "Charli could not answer right now."})
+// Confirm resolves a previously proposed action (approve or reject). The
+// outcome (execute/cancelled/denied) arrives on the session's SSE stream.
+func (h *Handler) Confirm(c *gin.Context) {
+	var req confirmRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "invalid request", err)
 		return
 	}
-	h.hub.Publish(session, stream.Event{Type: "chat", ID: id, Content: answer})
+
+	event, found := h.svc.Confirm(req.Session, req.ID, req.Approved)
+	if !found {
+		response.Error(c, http.StatusNotFound, "no pending action for that id", nil)
+		return
+	}
+
+	h.hub.Publish(req.Session, event)
+	response.OK(c, "accepted", nil)
 }
