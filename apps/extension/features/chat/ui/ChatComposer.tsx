@@ -15,9 +15,9 @@ interface ChatComposerProps {
 // Escape (wired in ChatApp).
 export function ChatComposer({ value, disabled, working, onChange, onSend, onStop }: ChatComposerProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 rounded-2xl border border-border bg-card py-1.5 pr-1.5 pl-3 shadow-sm transition-all focus-within:border-transparent focus-within:ring-2 focus-within:ring-primary">
       <input
-        className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         value={value}
         placeholder="Ask Charli…"
         onChange={(e) => onChange(e.target.value)}
@@ -25,7 +25,7 @@ export function ChatComposer({ value, disabled, working, onChange, onSend, onSto
       />
       {working ? (
         <button
-          className="flex size-9 items-center justify-center rounded-lg bg-red-600 text-white transition-colors hover:bg-red-700"
+          className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90"
           onClick={onStop}
           title="Stop (Esc)"
         >
@@ -33,7 +33,7 @@ export function ChatComposer({ value, disabled, working, onChange, onSend, onSto
         </button>
       ) : (
         <button
-          className="flex size-9 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
           onClick={onSend}
           disabled={disabled}
           title="Send"

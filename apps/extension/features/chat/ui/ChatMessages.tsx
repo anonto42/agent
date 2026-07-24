@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@charli/shared';
+import { Bot, MessageCircle, User } from 'lucide-react';
 import { cn } from '@shared/lib';
 
 interface ChatMessagesProps {
@@ -9,27 +10,46 @@ interface ChatMessagesProps {
 export function ChatMessages({ messages }: ChatMessagesProps) {
   if (messages.length === 0) {
     return (
-      <p className="mt-8 text-center text-sm text-slate-400">
-        Ask Charli anything about this page.
-      </p>
+      <div className="mt-8 flex flex-col items-center gap-3 text-center">
+        <span className="flex size-12 items-center justify-center rounded-full bg-muted">
+          <MessageCircle className="size-6 text-muted-foreground" />
+        </span>
+        <p className="text-sm text-muted-foreground">Ask Charli anything about this page.</p>
+      </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {messages.map((m, i) => (
-        <div
-          key={i}
-          className={cn(
-            'max-w-[85%] rounded-lg px-3 py-2 text-sm',
-            m.role === 'user'
-              ? 'self-end bg-blue-600 text-white'
-              : 'self-start bg-slate-100 text-slate-800',
-          )}
-        >
-          {m.content}
-        </div>
-      ))}
+    <div className="flex flex-col gap-1">
+      {messages.map((m, i) => {
+        const isUser = m.role === 'user';
+        return (
+          <div key={i} className={cn('my-1.5 flex items-start gap-2', isUser && 'flex-row-reverse')}>
+            <span
+              className={cn(
+                'flex size-7 shrink-0 items-center justify-center rounded-full',
+                isUser ? 'bg-primary' : 'bg-accent',
+              )}
+            >
+              {isUser ? (
+                <User className="size-3.5 text-primary-foreground" />
+              ) : (
+                <Bot className="size-3.5 text-accent-foreground" />
+              )}
+            </span>
+            <div
+              className={cn(
+                'max-w-[80%] rounded-lg px-3 py-2 text-sm shadow-sm',
+                isUser
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-border bg-card text-foreground',
+              )}
+            >
+              {m.content}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -8,7 +8,7 @@ export function GoogleConnectButton() {
 
   if (connected) {
     return (
-      <span className="ml-auto rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+      <span className="ml-auto rounded-full bg-secondary/10 px-2 py-1 text-xs font-medium text-secondary">
         Sheets ✓
       </span>
     );
@@ -16,7 +16,7 @@ export function GoogleConnectButton() {
 
   return (
     <button
-      className="ml-auto rounded-full border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+      className="ml-auto rounded-full border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
       onClick={() => void connect()}
       disabled={connecting}
       title="Connect Google Sheets"
