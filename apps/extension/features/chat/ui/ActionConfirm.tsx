@@ -17,7 +17,7 @@ export function ActionConfirm({ action, disabled, onApprove, onReject }: ActionC
       : `Click "${action.target ?? 'a button'}"`;
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm shadow-sm dark:border-amber-900 dark:bg-amber-950/30">
+    <div className="charli-message-in rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm shadow-sm dark:border-amber-900 dark:bg-amber-950/30">
       <p className="mb-2 text-foreground">{label}</p>
       <div className="flex gap-2">
         <button
