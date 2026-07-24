@@ -86,15 +86,16 @@ export function useChat() {
           if (event.action) {
             const action = event.action;
             const id = event.id;
-            void performAction(action).then((ok) => {
+            void performAction(action).then((result) => {
               setMessages((m) => [
                 ...m,
                 {
                   role: 'assistant',
-                  content: ok ? '✓ Done.' : '⚠️ I could not complete that action on the page.',
+                  content: result.success ? '✓ Done.' : `⚠️ ${result.detail || 'I could not complete that action.'}`,
                 },
               ]);
-              void observeAction(id, ok, ok ? '' : 'the DOM action reported failure').catch(() => {
+              const detail = result.detail || 'the action reported failure';
+              void observeAction(id, result.success, result.success ? '' : detail).catch(() => {
                 if (isCurrentTask) finishTask();
                 setError('Lost contact with Charli mid-task.');
               });

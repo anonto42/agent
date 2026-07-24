@@ -10,6 +10,11 @@
 // - If the user's message mentions "fill" and there's no observation yet, the
 //   reply proposes a fill action (RiskAuto) — the backend runs this straight
 //   to "execute" with no confirmation step, so the test can prove that path.
+// - If the user's message mentions "spreadsheet" and there's no observation
+//   yet, the reply proposes a sheets_append action (L4, RiskConfirm) — the
+//   backend has no GOOGLE_CLIENT_ID/DATABASE_URL in the E2E environment, so
+//   this always fails with "not connected," letting the test prove that
+//   failure flows back through the loop like any other failed action.
 // - Once an observation is present (the backend's L3 loop reported the action
 //   executed), reply with a final plain-text answer instead of proposing the
 //   same action again — otherwise the loop would repeat forever, since this
@@ -41,6 +46,10 @@ createServer((req, res) => {
         );
         const userMsg = messages.find((x) => x.role === 'user');
 
+        const proposedSheetsAppend = messages.some(
+          (x) => x.role === 'assistant' && typeof x.content === 'string' && x.content.includes('"kind":"sheets_append"'),
+        );
+
         if (userMsg && /fill/i.test(userMsg.content) && !hasObservation) {
           content = JSON.stringify({
             action: { kind: 'fill', target: 'Email', value: 'me@example.com' },
@@ -51,8 +60,15 @@ createServer((req, res) => {
             action: { kind: 'click', target: 'Submit' },
             message: 'Click the Submit button?',
           });
+        } else if (userMsg && /spreadsheet/i.test(userMsg.content) && !hasObservation) {
+          content = JSON.stringify({
+            action: { kind: 'sheets_append', spreadsheetId: 'test-sheet-id', values: ['a', 'b'] },
+            message: 'Add this row to your spreadsheet?',
+          });
         } else if (hasObservation && proposedFill) {
           content = 'All done — I filled that in for you.';
+        } else if (hasObservation && proposedSheetsAppend) {
+          content = 'Noted — could not add that to your spreadsheet.';
         } else if (hasObservation) {
           content = 'All done — I clicked the Submit button for you.';
         } else if (pageMsg) {

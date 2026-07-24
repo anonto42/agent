@@ -38,13 +38,16 @@ export interface ChatRequest {
   page?: string; // text of the page the user is viewing (L1)
 }
 /**
- * Action is something Charli proposes to do on the page (L2). The model selects
- * it; the backend safety engine decides whether it runs.
+ * Action is something Charli proposes to do on the page (L2), or against a
+ * connected external app (L4). The model selects it; the backend safety
+ * engine decides whether it runs.
  */
 export interface Action {
-  kind: string; // "fill" | "click"
+  kind: string; // "fill" | "click" | "sheets_append"
   value?: string; // text to type (fill)
   target?: string; // button/link text to click (click)
+  spreadsheetId?: string; // sheet id or URL (sheets_append)
+  values?: string[]; // row values to append (sheets_append)
 }
 /**
  * ChatEvent is a message pushed down the SSE stream (server -> client).
@@ -88,4 +91,43 @@ export interface ObserveRequest {
 export interface InterruptRequest {
   session: string;
   id: string;
+}
+/**
+ * GoogleConnectRequest is the POST /integrations/google/connect body: start
+ * an OAuth connection for this browser installation (client -> server).
+ */
+export interface GoogleConnectRequest {
+  deviceId: string;
+}
+/**
+ * GoogleConnectResponse carries the Google consent URL the client should
+ * open in a new tab (server -> client).
+ */
+export interface GoogleConnectResponse {
+  authUrl: string;
+}
+/**
+ * GoogleStatusResponse reports whether a device has a completed Google
+ * connection (server -> client).
+ */
+export interface GoogleStatusResponse {
+  connected: boolean;
+}
+/**
+ * GoogleAppendRequest is the POST /integrations/google/append body: perform
+ * a confirmed sheets_append action (client -> server). Not part of the SSE
+ * chat protocol — this is what the extension's performAction calls to
+ * "execute" a sheets_append the same way it executes fill/click on the DOM.
+ */
+export interface GoogleAppendRequest {
+  deviceId: string;
+  spreadsheetId: string;
+  values: string[];
+}
+/**
+ * GoogleAppendResponse reports whether the append succeeded (server -> client).
+ */
+export interface GoogleAppendResponse {
+  success: boolean;
+  detail?: string;
 }

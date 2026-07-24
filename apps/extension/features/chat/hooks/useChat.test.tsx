@@ -35,7 +35,7 @@ describe('useChat', () => {
     mockedConfirmAction.mockReset().mockResolvedValue(undefined);
     mockedObserveAction.mockReset().mockResolvedValue(undefined);
     mockedInterruptTask.mockReset().mockResolvedValue(undefined);
-    mockedPerformAction.mockReset().mockResolvedValue(true);
+    mockedPerformAction.mockReset().mockResolvedValue({ success: true });
     mockedOnChatEvent.mockReset().mockImplementation((listener) => {
       emit = listener;
       return () => {};

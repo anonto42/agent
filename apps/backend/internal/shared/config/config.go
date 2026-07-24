@@ -21,6 +21,11 @@ type Config struct {
 	LLMBaseURL string
 	LLMAPIKey  string
 	LLMModel   string
+
+	// Google OAuth (L4 — Sheets integration). Empty means the integration is
+	// unavailable; it never blocks startup.
+	GoogleClientID     string
+	GoogleClientSecret string
 }
 
 // Load reads configuration from environment variables and .env file.
@@ -52,5 +57,8 @@ func Load() (*Config, error) {
 		LLMBaseURL:  v.GetString("LLM_BASE_URL"),
 		LLMAPIKey:   v.GetString("LLM_API_KEY"),
 		LLMModel:    v.GetString("LLM_MODEL"),
+
+		GoogleClientID:     v.GetString("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: v.GetString("GOOGLE_CLIENT_SECRET"),
 	}, nil
 }

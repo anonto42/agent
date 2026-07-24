@@ -142,3 +142,48 @@ scheduled; noted for when L4 scope is defined.
   existing output on a hit, so E2E could silently run against a stale
   dev-mode build. Added an uncached `extension:build-fresh` task and pointed
   `e2e`'s dependency at it.
+- **L4 (first cross-app workflow): done.** Google Sheets connect + append —
+  extract data from the current page, append it as a row in a Sheet the user
+  connects via OAuth. New `apps/backend/internal/modules/google` module
+  (`domain.Connection` with `UpdatedAt` meaningful — tokens refresh in place,
+  unlike audit's append-only `Entry`; `application.Service` owns
+  BeginConnect/CompleteConnect/IsConnected/AppendRow; `GormRepository`
+  sharing the same Postgres connection as audit). New `sheets_append` tool
+  (`RiskConfirm`) in the registry — no new "extraction" step needed, the
+  model already gets page text every turn (L1) and just reasons over it like
+  it already does for `fill`. Dependency: `golang.org/x/oauth2` only —
+  deliberately not `google.golang.org/api/sheets/v4` (Google's generated
+  client), a hand-rolled HTTP call to the one endpoint needed
+  (`values.append`) matches `internal/shared/infrastructure/llm`'s existing
+  style and CLAUDE.md's dependency-light convention.
+  Two real design points: (1) surfaced that the extension had **no
+  persistent identity at all** (`stream.ts`'s `session` is per-page-load,
+  `chrome.storage` was granted but unused) — new `deviceId.ts` fixes that,
+  kept deliberately separate from `session` (task/SSE routing untouched).
+  (2) `sheets_append` is dispatched by the extension's **existing**
+  `performAction.ts` handler map exactly like `fill`/`click` — "performing"
+  it just means calling a backend API instead of touching the DOM, so
+  `chat/application`'s loop (`step`/`Confirm`/`Observe`) needed **zero**
+  changes; a not-connected failure flows back through the existing
+  observe/loop machinery like any other failed action.
+  Found and fixed a real bug during E2E verification: `appendRequest`'s
+  `deviceId` had `binding:"required"`, so an empty/transient device id
+  produced an opaque 400 instead of a clear "not connected" — removed the
+  tag; `AppendRow`'s own not-found handling already covers it gracefully.
+  Scope cuts (all deliberate, noted in the plan): tokens stored unencrypted
+  in Postgres (same trust boundary as the rest of the DB — no KMS anywhere
+  in this stack); one connection per device, not multi-user accounts; no
+  spreadsheet-picker UI (user names the sheet by URL/ID in chat); no E2E
+  test against real/fake-served Google APIs (Go-level tests with an
+  httptest-server-backed oauth2.Config cover BeginConnect/CompleteConnect/
+  token-refresh/AppendRow; the E2E "not connected" path needs no mocking
+  since the test env has no Google credentials by construction).
+  Verified: new Go tests (google/application + google/interfaces, including
+  the token-refresh path against a fake token server), new extension tests
+  (deviceId, performAction's sheets_append case, the connect button/hook),
+  new E2E test, AND a real manual run — real Postgres migrated the new
+  `connections` table cleanly, `/status` and `/append` both correctly
+  reported unavailable with no `GOOGLE_CLIENT_ID` set. `moon run backend:
+  check/lint/test`, `moon run extension:check/test`, `moon run :e2e` — all
+  green. Not yet verified: an actual live OAuth round-trip (needs the user's
+  real Google Cloud credentials in `.env`).

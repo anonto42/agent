@@ -96,6 +96,49 @@ test('risk tiers: a low-risk fill action auto-executes without confirmation', as
   });
 });
 
+// L4: sheets_append is proposed and confirmed like any RiskConfirm action,
+// but "performing" it means calling the backend's Google integration instead
+// of touching the DOM. With no GOOGLE_CLIENT_ID/DATABASE_URL configured in
+// this E2E environment, the integration reports itself unavailable — this
+// proves that failure surfaces through the normal observe/loop machinery
+// (a clear message, then the loop continues to a final answer) rather than
+// crashing or hanging.
+test('L4: sheets_append with no Google connection fails gracefully through the loop', async ({ page }) => {
+  await page.addInitScript(() => {
+    const store: Record<string, string> = {};
+    // @ts-expect-error minimal stub of the chrome extension API
+    window.chrome = {
+      tabs: { query: async () => [{ id: 1 }] },
+      scripting: { executeScript: async () => [{ result: true }] },
+      // A real browser always has chrome.storage; getDeviceId() needs it to
+      // produce a real id — an empty deviceId fails the backend's required
+      // binding, which would mask the failure this test is actually after.
+      storage: {
+        local: {
+          get: async (key: string) => ({ [key]: store[key] }),
+          set: async (items: Record<string, string>) => Object.assign(store, items),
+        },
+      },
+    };
+  });
+
+  await page.goto(PANEL);
+  await page.getByPlaceholder('Ask Charli…').fill('add this row to my spreadsheet');
+  await page.getByTitle('Send').click();
+
+  await expect(page.getByText('Add this row to your spreadsheet?')).toBeVisible({ timeout: 20_000 });
+  await page.getByRole('button', { name: 'Approve' }).click();
+
+  // The append call fails ("not connected") — the panel must surface that
+  // specific detail, not a generic action-failure message.
+  await expect(page.getByText(/google sheets isn't connected yet/i)).toBeVisible({ timeout: 20_000 });
+
+  // The loop still continues afterward via observe, same as any other action.
+  await expect(page.getByText('Noted — could not add that to your spreadsheet.')).toBeVisible({
+    timeout: 20_000,
+  });
+});
+
 // L2 (reject path): rejecting must cancel, and nothing should be performed.
 test('action loop: propose -> reject cancels without executing', async ({ page }) => {
   let executed = false;

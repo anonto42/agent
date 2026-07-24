@@ -32,12 +32,15 @@ type ChatRequest struct {
 	Page    string `json:"page,omitempty"` // text of the page the user is viewing (L1)
 }
 
-// Action is something Charli proposes to do on the page (L2). The model selects
-// it; the backend safety engine decides whether it runs.
+// Action is something Charli proposes to do on the page (L2), or against a
+// connected external app (L4). The model selects it; the backend safety
+// engine decides whether it runs.
 type Action struct {
-	Kind   string `json:"kind"`             // "fill" | "click"
-	Value  string `json:"value,omitempty"`  // text to type (fill)
-	Target string `json:"target,omitempty"` // button/link text to click (click)
+	Kind          string   `json:"kind"`                    // "fill" | "click" | "sheets_append"
+	Value         string   `json:"value,omitempty"`         // text to type (fill)
+	Target        string   `json:"target,omitempty"`        // button/link text to click (click)
+	SpreadsheetID string   `json:"spreadsheetId,omitempty"` // sheet id or URL (sheets_append)
+	Values        []string `json:"values,omitempty"`        // row values to append (sheets_append)
 }
 
 // ChatEvent is a message pushed down the SSE stream (server -> client).
@@ -78,4 +81,38 @@ type ObserveRequest struct {
 type InterruptRequest struct {
 	Session string `json:"session"`
 	ID      string `json:"id"`
+}
+
+// GoogleConnectRequest is the POST /integrations/google/connect body: start
+// an OAuth connection for this browser installation (client -> server).
+type GoogleConnectRequest struct {
+	DeviceID string `json:"deviceId"`
+}
+
+// GoogleConnectResponse carries the Google consent URL the client should
+// open in a new tab (server -> client).
+type GoogleConnectResponse struct {
+	AuthURL string `json:"authUrl"`
+}
+
+// GoogleStatusResponse reports whether a device has a completed Google
+// connection (server -> client).
+type GoogleStatusResponse struct {
+	Connected bool `json:"connected"`
+}
+
+// GoogleAppendRequest is the POST /integrations/google/append body: perform
+// a confirmed sheets_append action (client -> server). Not part of the SSE
+// chat protocol — this is what the extension's performAction calls to
+// "execute" a sheets_append the same way it executes fill/click on the DOM.
+type GoogleAppendRequest struct {
+	DeviceID      string   `json:"deviceId"`
+	SpreadsheetID string   `json:"spreadsheetId"`
+	Values        []string `json:"values"`
+}
+
+// GoogleAppendResponse reports whether the append succeeded (server -> client).
+type GoogleAppendResponse struct {
+	Success bool   `json:"success"`
+	Detail  string `json:"detail,omitempty"`
 }

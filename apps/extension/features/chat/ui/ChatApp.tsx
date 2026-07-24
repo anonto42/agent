@@ -4,6 +4,7 @@ import { useChat } from '../hooks/useChat';
 import { ChatMessages } from './ChatMessages';
 import { ChatComposer } from './ChatComposer';
 import { ActionConfirm } from './ActionConfirm';
+import { GoogleConnectButton } from '@features/google/ui/GoogleConnectButton';
 
 // Container: delegates state to useChat and composes presentational children.
 // (The clean container-hook pattern from omni.dns.)
@@ -30,6 +31,7 @@ export function ChatApp() {
           <Sparkles className="size-4" />
         </span>
         <h1 className="text-sm font-semibold">Charli</h1>
+        <GoogleConnectButton />
       </header>
 
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
