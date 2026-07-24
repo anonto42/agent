@@ -9,10 +9,27 @@ tasks:
     options:
       cache: false
   build:
-    command: 'pnpm exec wxt build'
+    # Clean first: harmless extra safety on a real (cache-miss) run — see
+    # build-fresh below for why this alone isn't enough to protect E2E.
+    script: 'rm -rf .output && pnpm exec wxt build'
     inputs:
       ['entrypoints/**/*', 'features/**/*', 'shared/**/*', 'entities/**/*', 'wxt.config.ts', 'package.json']
     outputs: ['.output']
+  # `dev` (cache: false, above) writes its own dev-server HTML into the same
+  # .output dir `build` owns, for unpacked-extension loading during
+  # development. Because `dev` runs outside moon's cache tracking, that
+  # dev-mode output can sit there looking valid to moon: on a cache HIT, moon
+  # trusts whatever's already on disk and does not re-run `build` or verify
+  # it — so a dirtied .output silently keeps being served (this is exactly
+  # what broke E2E once). Anything that needs a guaranteed-real production
+  # build (E2E) must depend on this uncached variant instead of `build`.
+  build-fresh:
+    script: 'rm -rf .output && pnpm exec wxt build'
+    inputs:
+      ['entrypoints/**/*', 'features/**/*', 'shared/**/*', 'entities/**/*', 'wxt.config.ts', 'package.json']
+    outputs: ['.output']
+    options:
+      cache: false
   check:
     command: 'pnpm exec tsc --noEmit'
     inputs:

@@ -7,6 +7,10 @@ tasks:
   # run explicitly with `moon run :e2e`. Builds the extension panel first.
   e2e:
     command: 'pnpm exec playwright test'
-    deps: ['extension:build', 'backend:build']
+    # extension:build-fresh, not extension:build: a cached build can silently
+    # serve a stale/dev-mode .output dirtied by `extension:dev` (moon trusts
+    # existing output on a cache hit without re-verifying it) — see
+    # apps/extension/moon.yml. E2E needs a guaranteed-real build every time.
+    deps: ['extension:build-fresh', 'backend:build']
     options:
       cache: false
