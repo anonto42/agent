@@ -70,6 +70,32 @@ test('action loop: propose -> approve -> execute -> observe -> final answer', as
   });
 });
 
+// Graded risk tiers: a RiskAuto tool (fill) must run without ever showing the
+// Approve/Reject confirm card — only RiskConfirm tools (click, tested above)
+// stop for the user.
+test('risk tiers: a low-risk fill action auto-executes without confirmation', async ({ page }) => {
+  await page.addInitScript(() => {
+    // @ts-expect-error minimal stub of the chrome extension API
+    window.chrome = {
+      tabs: { query: async () => [{ id: 1 }] },
+      scripting: { executeScript: async () => [{ result: true }] }, // pretend the fill succeeded
+    };
+  });
+
+  await page.goto(PANEL);
+  await page.getByPlaceholder('Ask Charli…').fill('please fill in my email');
+  await page.getByTitle('Send').click();
+
+  // Straight to "✓ Done." — no confirm card, no Approve/Reject buttons.
+  await expect(page.getByText('✓ Done.')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: 'Approve' })).not.toBeVisible();
+
+  // The loop still continues afterward via observe, same as a confirmed action.
+  await expect(page.getByText('All done — I filled that in for you.')).toBeVisible({
+    timeout: 20_000,
+  });
+});
+
 // L2 (reject path): rejecting must cancel, and nothing should be performed.
 test('action loop: propose -> reject cancels without executing', async ({ page }) => {
   let executed = false;

@@ -70,19 +70,42 @@ func TestReplyPlainText(t *testing.T) {
 	}
 }
 
-func TestReplyProposesAction(t *testing.T) {
+// TestReplyProposesConfirmTierAction covers a RiskConfirm tool (click): it
+// must be proposed and wait for the user, not run on its own.
+func TestReplyProposesConfirmTierAction(t *testing.T) {
+	reply := `{"action":{"kind":"click","target":"Submit"},"message":"Click submit?"}`
+	svc := newTestService(stubLLM{reply: reply})
+
+	event := svc.Reply(context.Background(), "s1", "1", "click submit", "")
+	if event.Type != "action" {
+		t.Fatalf("expected action event, got %+v", event)
+	}
+	if event.Action == nil || event.Action.Kind != "click" || event.Action.Target != "Submit" {
+		t.Fatalf("unexpected action: %+v", event.Action)
+	}
+	if event.Content != "Click submit?" {
+		t.Fatalf("unexpected message: %q", event.Content)
+	}
+}
+
+// TestReplyAutoExecutesLowRiskAction covers a RiskAuto tool (fill): it must
+// go straight to "execute" — reversible, visible actions don't need a
+// confirmation round-trip (agent-safety.md's risk tiers).
+func TestReplyAutoExecutesLowRiskAction(t *testing.T) {
 	reply := `{"action":{"kind":"fill","target":"email field","value":"me@example.com"},"message":"Fill in your email?"}`
 	svc := newTestService(stubLLM{reply: reply})
 
 	event := svc.Reply(context.Background(), "s1", "1", "fill in my email", "")
-	if event.Type != "action" {
-		t.Fatalf("expected action event, got %+v", event)
+	if event.Type != "execute" {
+		t.Fatalf("expected an auto-executed event, got %+v", event)
 	}
 	if event.Action == nil || event.Action.Kind != "fill" || event.Action.Value != "me@example.com" {
 		t.Fatalf("unexpected action: %+v", event.Action)
 	}
-	if event.Content != "Fill in your email?" {
-		t.Fatalf("unexpected message: %q", event.Content)
+
+	// It never became a pending confirmation.
+	if _, found := svc.Confirm("s1", "1", true); found {
+		t.Fatal("an auto-executed action must not still be pending confirmation")
 	}
 }
 
@@ -124,7 +147,7 @@ func TestConfirmApprovedReturnsExecute(t *testing.T) {
 }
 
 func TestConfirmRejectedReturnsCancelled(t *testing.T) {
-	reply := `{"action":{"kind":"fill","target":"comment box","value":"hi"},"message":"ok?"}`
+	reply := `{"action":{"kind":"click","target":"Post comment"},"message":"ok?"}`
 	svc := newTestService(stubLLM{reply: reply})
 	svc.Reply(context.Background(), "s1", "1", "leave a comment", "")
 

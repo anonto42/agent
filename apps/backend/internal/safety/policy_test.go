@@ -50,3 +50,35 @@ func TestEvaluateRejectsMalformedArgs(t *testing.T) {
 		}
 	}
 }
+
+// TestEvaluateRequiresConfirmationPerRiskTier locks in agent-safety.md's risk
+// tiers: fill (RiskAuto) may run on its own, click (RiskConfirm) may not.
+func TestEvaluateRequiresConfirmationPerRiskTier(t *testing.T) {
+	engine := NewEngine(tools.Default())
+
+	fill := engine.Evaluate(contracts.Action{Kind: "fill", Target: "email field", Value: "me@example.com"})
+	if !fill.Allowed || fill.RequiresConfirmation {
+		t.Errorf("expected fill to be auto-allowed without confirmation, got %+v", fill)
+	}
+
+	click := engine.Evaluate(contracts.Action{Kind: "click", Target: "Submit"})
+	if !click.Allowed || !click.RequiresConfirmation {
+		t.Errorf("expected click to require confirmation, got %+v", click)
+	}
+}
+
+// TestEvaluateBlocksRiskBlockTools proves a RiskBlock-tier tool is denied
+// outright, even though no default tool currently uses that tier.
+func TestEvaluateBlocksRiskBlockTools(t *testing.T) {
+	registry := tools.NewRegistry(tools.Tool{
+		Kind:          "wire_transfer",
+		Risk:          tools.RiskBlock,
+		PromptExample: `{"kind": "wire_transfer"}`,
+		Validate:      func(contracts.Action) error { return nil },
+	})
+	engine := NewEngine(registry)
+
+	if d := engine.Evaluate(contracts.Action{Kind: "wire_transfer"}); d.Allowed {
+		t.Errorf("expected a RiskBlock tool to be denied, got %+v", d)
+	}
+}

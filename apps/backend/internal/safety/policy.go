@@ -28,6 +28,12 @@ var blockedTerms = []string{
 type Decision struct {
 	Allowed bool
 	Reason  string // set when Allowed is false
+
+	// RequiresConfirmation is set when Allowed is true: whether the user must
+	// approve this action before it runs, per the tool's risk tier. false
+	// means the action is safe to auto-execute (e.g. a reversible, visible
+	// fill) — see .agents/shared/rules/agent-safety.md's risk tiers.
+	RequiresConfirmation bool
 }
 
 // Engine evaluates proposed actions against the tool registry and Charli's
@@ -41,9 +47,8 @@ func NewEngine(registry *tools.Registry) *Engine {
 	return &Engine{registry: registry}
 }
 
-// Evaluate decides whether a proposed action may even be shown to the user for
-// confirmation. L2 v1 policy: every action requires user confirmation (nothing
-// auto-executes yet); this function only handles the hard "never" cases.
+// Evaluate decides whether a proposed action may run at all, and if so,
+// whether it needs the user's confirmation first.
 func (e *Engine) Evaluate(action contracts.Action) Decision {
 	tool, ok := e.registry.Lookup(action.Kind)
 	if !ok {
@@ -51,6 +56,9 @@ func (e *Engine) Evaluate(action contracts.Action) Decision {
 	}
 	if err := tool.Validate(action); err != nil {
 		return Decision{Allowed: false, Reason: err.Error()}
+	}
+	if tool.Risk == tools.RiskBlock {
+		return Decision{Allowed: false, Reason: "this action is never permitted"}
 	}
 
 	haystack := strings.ToLower(action.Target + " " + action.Value)
@@ -60,5 +68,5 @@ func (e *Engine) Evaluate(action contracts.Action) Decision {
 		}
 	}
 
-	return Decision{Allowed: true}
+	return Decision{Allowed: true, RequiresConfirmation: tool.Risk != tools.RiskAuto}
 }

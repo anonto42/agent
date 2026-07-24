@@ -4,8 +4,12 @@
 // - If the request carries page context (L1), the reply echoes it back so the
 //   test can prove the page text made it all the way to the model.
 // - If the user's message mentions "click" and the conversation doesn't yet
-//   contain an observation, the reply proposes a click action (L2/L3), so the
-//   test can drive the full propose -> confirm -> execute -> observe loop.
+//   contain an observation, the reply proposes a click action (RiskConfirm),
+//   so the test can drive the full propose -> confirm -> execute -> observe
+//   loop.
+// - If the user's message mentions "fill" and there's no observation yet, the
+//   reply proposes a fill action (RiskAuto) — the backend runs this straight
+//   to "execute" with no confirmation step, so the test can prove that path.
 // - Once an observation is present (the backend's L3 loop reported the action
 //   executed), reply with a final plain-text answer instead of proposing the
 //   same action again — otherwise the loop would repeat forever, since this
@@ -32,13 +36,23 @@ createServer((req, res) => {
         const hasObservation = messages.some(
           (x) => typeof x.content === 'string' && x.content.startsWith(OBSERVATION_MARKER),
         );
+        const proposedFill = messages.some(
+          (x) => x.role === 'assistant' && typeof x.content === 'string' && x.content.includes('"kind":"fill"'),
+        );
         const userMsg = messages.find((x) => x.role === 'user');
 
-        if (userMsg && /click/i.test(userMsg.content) && !hasObservation) {
+        if (userMsg && /fill/i.test(userMsg.content) && !hasObservation) {
+          content = JSON.stringify({
+            action: { kind: 'fill', target: 'Email', value: 'me@example.com' },
+            message: 'Fill in the email field?',
+          });
+        } else if (userMsg && /click/i.test(userMsg.content) && !hasObservation) {
           content = JSON.stringify({
             action: { kind: 'click', target: 'Submit' },
             message: 'Click the Submit button?',
           });
+        } else if (hasObservation && proposedFill) {
+          content = 'All done — I filled that in for you.';
         } else if (hasObservation) {
           content = 'All done — I clicked the Submit button for you.';
         } else if (pageMsg) {

@@ -3,7 +3,8 @@
 Ideas pulled from MindStudio, Composio, Traycer, and Base (Base MCP), filtered
 to what fits Charli's model (LLM selects a tool; Go backend validates;
 extension executes) and mapped onto gaps found in the current implementation
-(as of commit `3a23283`, L1 shipped, no L2/L3 yet).
+(as of commit `3a23283`, L1 shipped, no L2/L3 yet — see Status below for what
+has since shipped).
 
 ## Backlog
 
@@ -35,11 +36,15 @@ not queryable. Needs Postgres + GORM (already in `infra/docker-compose.yml`)
 and a schema, once the website's audit-log viewer needs real data. Reference:
 MindStudio's named run history.
 
-### 5. Plan-preview UX for the L3 ReAct loop
-When the multi-step loop is built, don't gate one action at a time blindly —
-generate the full plan up front, let the user review/edit/approve it, then
-execute step-by-step with interrupt (the Esc kill switch already required by
-`agent-safety.md`). Reference: Traycer's plan → review → execute flow.
+### 5. ~~Plan-preview UX for the L3 ReAct loop~~ — superseded, see Status
+Originally: don't gate one action at a time blindly, generate the full plan
+up front (Traycer's plan → review → execute flow). Superseded once L3 was
+actually built — `.agents/shared/rules/go-patterns.md`'s existing convention
+("The loop emits ONE tool call per turn, applies the result, then
+re-decides") took precedence over this idea, so L3 does NOT show an upfront
+plan; it confirms one step at a time, same as L2, just repeating until the
+model is done. The turn-by-turn kill switch this item also asked for
+(`agent-safety.md`'s Esc requirement) did ship — see Status.
 
 ### 6. (Future / L4) Spend-guardrail pattern for agent-initiated payments
 Only relevant if/when Charli automates a checkout or payment flow on a page.
@@ -71,6 +76,23 @@ scheduled; noted for when L4 scope is defined.
   dispatch map for the same reason. All existing tests updated; new tests
   added for the malformed-args case. Verified via `moon run backend:check/
   lint/test` and `moon run extension:check/test` — all green.
-- Items 2–5 not started. Item 2 (graded risk tiers) is unblocked now that
+- **L3 (multi-step agent loop): done**, commit `f15d876`. `Reply` starts a
+  per-session `taskState`; each confirmed action's result is reported back via
+  new `POST /observe`, which appends an `Observation: ...` message and calls
+  the model again — repeating until a plain-text final answer, a denial, or a
+  6-turn cap (`defaultMaxTurns`). New `POST /interrupt` is the kill switch
+  (Stop button + Escape in the panel), and cancels an in-flight LLM call via
+  `context.CancelFunc`, not just future turns — a pointer-identity
+  `isCurrent` guard stops a stale in-flight reply from reviving an
+  interrupted task. Item 5's plan-preview idea was explicitly NOT adopted
+  (see item 5). Covered by new Go tests (multi-turn continuation, max-turns,
+  interrupt, interrupt-mid-flight-call) and an extended E2E test proving the
+  loop continues past a single execute. Verified via `moon run backend:
+  check/lint/test`, `moon run extension:check/test`, and `moon run :e2e` —
+  all green.
+- Items 2–4 not started. Item 2 (graded risk tiers) is unblocked now that
   `Tool.Risk` metadata exists — it just needs `safety.Engine.Evaluate` wired
-  to read it instead of gating everything unconditionally.
+  to read it instead of gating everything unconditionally. It's more valuable
+  now than before L3 shipped: a multi-step task that stops for confirmation
+  on every single turn is tedious — auto-executing low-risk steps (e.g.
+  `fill`) would make L3 noticeably better without any UX change.

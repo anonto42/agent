@@ -152,7 +152,8 @@ func (s *Service) step(ctx context.Context, session string, state *taskState) co
 	decision := s.safety.Evaluate(*action)
 	s.log.Info("audit: action proposed",
 		zap.String("session", session), zap.String("id", id),
-		zap.String("kind", action.Kind), zap.Bool("allowed", decision.Allowed), zap.Int("turn", state.turn))
+		zap.String("kind", action.Kind), zap.Bool("allowed", decision.Allowed),
+		zap.Bool("requiresConfirmation", decision.RequiresConfirmation), zap.Int("turn", state.turn))
 
 	if !decision.Allowed {
 		s.clearTaskIfCurrent(session, state)
@@ -160,6 +161,15 @@ func (s *Service) step(ctx context.Context, session string, state *taskState) co
 	}
 
 	state.messages = append(state.messages, llm.Message{Role: "assistant", Content: raw})
+
+	if !decision.RequiresConfirmation {
+		// Low-risk tool (e.g. fill): skip the confirmation round-trip and go
+		// straight to execute. The task still continues from Observe once the
+		// extension reports back, same as a confirmed action would.
+		s.log.Info("audit: action auto-executed",
+			zap.String("session", session), zap.String("id", id), zap.String("kind", action.Kind))
+		return contracts.ChatEvent{Type: "execute", ID: id, Action: action}
+	}
 
 	s.mu.Lock()
 	s.pending[pendingKey{session, id}] = *action
