@@ -99,7 +99,7 @@ export default function Home() {
               <div className="max-w-[80%] self-end rounded-lg bg-primary px-3 py-2 text-primary-foreground">
                 What is this page about?
               </div>
-              <div className="max-w-[85%] self-start rounded-lg bg-secondary px-3 py-2">
+              <div className="max-w-[85%] self-start rounded-lg bg-muted px-3 py-2 text-foreground">
                 It’s the Charli landing page — it explains the extension and lets you download it.
               </div>
               <div className="max-w-[80%] self-end rounded-lg bg-primary px-3 py-2 text-primary-foreground">
@@ -137,7 +137,7 @@ export default function Home() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="border-t bg-secondary/30">
+      <section id="how" className="border-t bg-muted/50">
         <div className="mx-auto max-w-5xl px-6 py-20">
           <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
           <p className="mt-2 text-muted-foreground">Three steps to get Charli in your browser.</p>
@@ -176,7 +176,7 @@ export default function Home() {
           <ol className="mt-8 grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
             <li>1. Download and unzip the file above.</li>
             <li>
-              2. Open <code className="rounded bg-secondary px-1.5 py-0.5">chrome://extensions</code>.
+              2. Open <code className="rounded bg-muted px-1.5 py-0.5">chrome://extensions</code>.
             </li>
             <li>3. Turn on “Developer mode” (top right).</li>
             <li>4. Click “Load unpacked” and pick the unzipped folder.</li>
