@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	auditapp "github.com/levelaxis/charli/backend/internal/modules/audit/application"
 	"github.com/levelaxis/charli/backend/internal/safety"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/stream"
@@ -21,10 +22,13 @@ import (
 )
 
 // newTestHandler wires a Handler with the default tool registry and a safety
-// engine backed by it — the same wiring internal/app performs.
+// engine backed by it — the same wiring internal/app performs. Audit
+// persistence is a no-op (nil repo), matching how the app runs with no
+// database configured.
 func newTestHandler(hub *stream.Hub, client llm.Client) *Handler {
 	registry := tools.Default()
-	return NewHandler(hub, client, zap.NewNop(), registry, safety.NewEngine(registry))
+	audit := auditapp.NewService(nil, zap.NewNop())
+	return NewHandler(hub, client, zap.NewNop(), registry, safety.NewEngine(registry), audit)
 }
 
 // fakeLLM lets the test run offline (no real provider / API key).
@@ -91,6 +95,42 @@ func TestSendIncludesPageContext(t *testing.T) {
 		}
 		if !strings.Contains(joined, "platypus") {
 			t.Fatalf("page context missing from prompt: %q", joined)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("llm was never called")
+	}
+}
+
+// TestSendRedactsPageContext proves the redaction wiring end to end: a card
+// number visible on the page must never reach the LLM prompt.
+func TestSendRedactsPageContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	hub := stream.NewHub()
+	cap := &capturingLLM{reply: "ok", got: make(chan []llm.Message, 1)}
+	engine := gin.New()
+	RegisterRoutes(engine.Group("/api/v1"), newTestHandler(hub, cap))
+
+	srv := httptest.NewServer(engine)
+	defer srv.Close()
+
+	body := `{"session":"s1","id":"1","content":"summarize","page":"Card on file: 4111 1111 1111 1111"}`
+	resp, err := http.Post(srv.URL+"/api/v1/chat", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("post chat: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	select {
+	case msgs := <-cap.got:
+		var joined string
+		for _, m := range msgs {
+			joined += m.Content + "\n"
+		}
+		if strings.Contains(joined, "4111") {
+			t.Fatalf("card number leaked into the LLM prompt: %q", joined)
+		}
+		if !strings.Contains(joined, "[REDACTED]") {
+			t.Fatalf("expected a redaction placeholder in the prompt: %q", joined)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("llm was never called")

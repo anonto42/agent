@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	auditapp "github.com/levelaxis/charli/backend/internal/modules/audit/application"
 	"github.com/levelaxis/charli/backend/internal/modules/chat/application"
 	"github.com/levelaxis/charli/backend/internal/safety"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
@@ -33,8 +34,8 @@ type Handler struct {
 }
 
 // NewHandler constructs the chat handler.
-func NewHandler(hub *stream.Hub, client llm.Client, log *zap.Logger, registry *tools.Registry, safetyEngine *safety.Engine) *Handler {
-	return &Handler{hub: hub, svc: application.NewService(client, log, registry, safetyEngine)}
+func NewHandler(hub *stream.Hub, client llm.Client, log *zap.Logger, registry *tools.Registry, safetyEngine *safety.Engine, auditService *auditapp.Service) *Handler {
+	return &Handler{hub: hub, svc: application.NewService(client, log, registry, safetyEngine, auditService)}
 }
 
 // Events opens a Server-Sent Events stream for a session. The client keeps it

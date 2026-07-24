@@ -8,11 +8,21 @@ import (
 
 	"go.uber.org/zap"
 
+	auditapp "github.com/levelaxis/charli/backend/internal/modules/audit/application"
+	auditdomain "github.com/levelaxis/charli/backend/internal/modules/audit/domain"
 	"github.com/levelaxis/charli/backend/internal/safety"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/tools"
 	"github.com/levelaxis/charli/contracts"
 )
+
+// fakeAuditRepo records every entry it's given, in order, for assertions.
+type fakeAuditRepo struct{ entries []auditdomain.Entry }
+
+func (f *fakeAuditRepo) Record(e auditdomain.Entry) error {
+	f.entries = append(f.entries, e)
+	return nil
+}
 
 type stubLLM struct{ reply string }
 
@@ -56,10 +66,21 @@ func (b *blockingLLM) Complete(ctx context.Context, _ []llm.Message) (string, er
 }
 
 // newTestService wires a Service with the default tool registry and a safety
-// engine backed by it — the same wiring internal/app performs.
+// engine backed by it — the same wiring internal/app performs. Audit
+// persistence is a no-op (nil repo), matching how the app runs with no
+// database configured.
 func newTestService(client llm.Client) *Service {
 	registry := tools.Default()
-	return NewService(client, zap.NewNop(), registry, safety.NewEngine(registry))
+	audit := auditapp.NewService(nil, zap.NewNop())
+	return NewService(client, zap.NewNop(), registry, safety.NewEngine(registry), audit)
+}
+
+// newTestServiceWithAudit is like newTestService but records audit entries
+// into repo, for tests asserting on what gets audited.
+func newTestServiceWithAudit(client llm.Client, repo auditdomain.Repository) *Service {
+	registry := tools.Default()
+	audit := auditapp.NewService(repo, zap.NewNop())
+	return NewService(client, zap.NewNop(), registry, safety.NewEngine(registry), audit)
 }
 
 func TestReplyPlainText(t *testing.T) {
@@ -263,5 +284,57 @@ func TestInterruptCancelsInFlightLLMCall(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Reply did not return after being interrupted")
+	}
+}
+
+// TestAuditRecordsFullTaskLifecycle proves the audit wiring itself: a full
+// propose -> confirm -> observe cycle must leave a durable trail of what was
+// proposed, that it was executed, and whether it actually succeeded on the
+// page — the "result" agent-safety.md's audit requirement asks for, which
+// wasn't captured anywhere before this change.
+func TestAuditRecordsFullTaskLifecycle(t *testing.T) {
+	client := &sequenceLLM{replies: []string{
+		`{"action":{"kind":"click","target":"Submit"},"message":"Click submit?"}`,
+		"All done!",
+	}}
+	repo := &fakeAuditRepo{}
+	svc := newTestServiceWithAudit(client, repo)
+
+	svc.Reply(context.Background(), "s1", "1", "click submit", "")
+	svc.Confirm("s1", "1", true)
+	svc.Observe(context.Background(), "s1", "1", true, "")
+
+	if len(repo.entries) != 3 {
+		t.Fatalf("expected 3 audit entries, got %d: %+v", len(repo.entries), repo.entries)
+	}
+	wantOutcomes := []string{
+		auditdomain.OutcomeProposed,
+		auditdomain.OutcomeExecuted,
+		auditdomain.OutcomeObservedOK,
+	}
+	for i, want := range wantOutcomes {
+		if repo.entries[i].Outcome != want {
+			t.Errorf("entry %d: expected outcome %q, got %q", i, want, repo.entries[i].Outcome)
+		}
+		if repo.entries[i].Session != "s1" || repo.entries[i].TaskID != "1" {
+			t.Errorf("entry %d: expected session/task s1/1, got %q/%q", i, repo.entries[i].Session, repo.entries[i].TaskID)
+		}
+	}
+}
+
+// TestAuditRecordsDenial proves a denied action is audited with its reason,
+// not just silently turned into a chat message.
+func TestAuditRecordsDenial(t *testing.T) {
+	reply := `{"action":{"kind":"fill","target":"password field","value":"hunter2"},"message":"ok?"}`
+	repo := &fakeAuditRepo{}
+	svc := newTestServiceWithAudit(stubLLM{reply: reply}, repo)
+
+	svc.Reply(context.Background(), "s1", "1", "fill my password", "")
+
+	if len(repo.entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %d: %+v", len(repo.entries), repo.entries)
+	}
+	if repo.entries[0].Outcome != auditdomain.OutcomeDenied || repo.entries[0].Reason == "" {
+		t.Errorf("expected a denied entry with a reason, got %+v", repo.entries[0])
 	}
 }

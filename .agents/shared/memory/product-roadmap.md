@@ -90,9 +90,55 @@ scheduled; noted for when L4 scope is defined.
   loop continues past a single execute. Verified via `moon run backend:
   check/lint/test`, `moon run extension:check/test`, and `moon run :e2e` —
   all green.
-- Items 2–4 not started. Item 2 (graded risk tiers) is unblocked now that
-  `Tool.Risk` metadata exists — it just needs `safety.Engine.Evaluate` wired
-  to read it instead of gating everything unconditionally. It's more valuable
-  now than before L3 shipped: a multi-step task that stops for confirmation
-  on every single turn is tedious — auto-executing low-risk steps (e.g.
-  `fill`) would make L3 noticeably better without any UX change.
+- **Item 2 (graded risk tiers): done**, commit `683a1d2`. `safety.Decision`
+  gained `RequiresConfirmation`; `Engine.Evaluate` sets it from each tool's
+  `Risk` (`fill` = auto, `click` = confirm, per `agent-safety.md`'s table) and
+  denies outright on `RiskBlock`. `service.step()` branches on it: an
+  auto-tier action returns `"execute"` directly instead of `"action"`,
+  skipping the confirm round-trip; the loop still continues via `Observe`
+  afterward exactly as before. No extension changes were needed — the
+  `"execute"` handling path already worked regardless of how it was reached.
+  Covered by new Go tests per tier plus a `RiskBlock` test, and a new E2E
+  test proving `fill` never shows the Approve/Reject card.
+- **Item 3 (PII redaction): done.** New `apps/backend/internal/redact`
+  package (`Text(string) string`) — regex-based, deliberately narrow to what
+  `agent-safety.md` actually names (passwords, card numbers, tokens), not
+  emails/phone numbers, so L1 stays useful for ordinary questions about a
+  page. Card-number candidates are confirmed with a Luhn check before
+  redacting, so ordinary long digit runs (order numbers, etc.) aren't
+  false-positived. Wired into `chat/application/service.go`'s `Reply`, where
+  page text is folded into the system prompt — `redact.Text(page)` instead of
+  raw `page`. Covered by unit tests per pattern plus an HTTP-level test
+  (`TestSendRedactsPageContext`) proving a card number never reaches the
+  captured LLM prompt.
+- **Item 4 (persisted audit log): done.** New `apps/backend/internal/modules/audit`
+  module (`domain.Entry` + `Repository` interface, `application.Service`,
+  `infrastructure.GormRepository`), plus `internal/shared/infrastructure/database`
+  for the GORM/Postgres connection (`go.mod` now depends on `gorm.io/gorm` +
+  `gorm.io/driver/postgres` — the backend's first real DB dependency).
+  Graceful by design: `cfg.DatabaseURL == ""` or an unreachable database
+  means `audit.Service` runs with a nil repo and `Record` no-ops (a `Warn`
+  log, nothing more) — `moon run backend:dev` and `moon run :e2e` keep
+  working unchanged with no database configured, exactly as confirmed by
+  testing this repo's actual `.env` (no `DATABASE_URL` set) and E2E's bare
+  binary (no DB either). `chat/application/service.go` now calls
+  `s.audit.Record(...)` at every decision point (`step`, `Confirm`,
+  `Interrupt`), plus a new one in `Observe` — whether the executed action
+  actually succeeded on the page wasn't captured anywhere durable before,
+  zap included; now it is (`observed_ok`/`observed_failed`). Verified two
+  ways: unit/HTTP tests with a fake in-memory repo (asserting the exact
+  outcome sequence a full propose→confirm→observe cycle produces), AND a
+  real end-to-end manual run against `docker compose -f
+  infra/docker-compose.yml up -d postgres` — confirmed 3 rows landed in the
+  `entries` table via `psql`. No HTTP read endpoint yet (write path only,
+  per this item's own original framing — a viewer API is separate,
+  website-integration work). No integration test against a real Postgres in
+  the automated suite (deliberate scope cut — the repository is two thin
+  GORM calls; verified manually instead, see above).
+- Items 5–6: not adopted / not scheduled, see their entries above — no change.
+- Also shipped, not originally on this list: an E2E build-freshness guard
+  (commit `3a49f00`) — `extension:dev` was found to dirty the same
+  `.output` dir `extension:build` owns, and moon's cache doesn't re-verify
+  existing output on a hit, so E2E could silently run against a stale
+  dev-mode build. Added an uncached `extension:build-fresh` task and pointed
+  `e2e`'s dependency at it.

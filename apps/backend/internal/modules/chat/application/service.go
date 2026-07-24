@@ -15,6 +15,9 @@ import (
 
 	"go.uber.org/zap"
 
+	auditapp "github.com/levelaxis/charli/backend/internal/modules/audit/application"
+	auditdomain "github.com/levelaxis/charli/backend/internal/modules/audit/domain"
+	"github.com/levelaxis/charli/backend/internal/redact"
 	"github.com/levelaxis/charli/backend/internal/safety"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/tools"
@@ -69,6 +72,7 @@ type Service struct {
 	llm          llm.Client
 	log          *zap.Logger
 	safety       *safety.Engine
+	audit        *auditapp.Service
 	systemPrompt string
 	maxTurns     int
 	mu           sync.Mutex
@@ -77,11 +81,12 @@ type Service struct {
 }
 
 // NewService constructs the chat application service.
-func NewService(client llm.Client, log *zap.Logger, registry *tools.Registry, safetyEngine *safety.Engine) *Service {
+func NewService(client llm.Client, log *zap.Logger, registry *tools.Registry, safetyEngine *safety.Engine, auditService *auditapp.Service) *Service {
 	return &Service{
 		llm:          client,
 		log:          log,
 		safety:       safetyEngine,
+		audit:        auditService,
 		systemPrompt: buildSystemPrompt(registry),
 		maxTurns:     defaultMaxTurns,
 		pending:      make(map[pendingKey]contracts.Action),
@@ -98,7 +103,7 @@ func (s *Service) Reply(ctx context.Context, session, id, content, page string) 
 	if page != "" {
 		messages = append(messages, llm.Message{
 			Role:    "system",
-			Content: "The user is viewing this page:\n" + page,
+			Content: "The user is viewing this page:\n" + redact.Text(page),
 		})
 	}
 	messages = append(messages, llm.Message{Role: "user", Content: content})
@@ -155,6 +160,18 @@ func (s *Service) step(ctx context.Context, session string, state *taskState) co
 		zap.String("kind", action.Kind), zap.Bool("allowed", decision.Allowed),
 		zap.Bool("requiresConfirmation", decision.RequiresConfirmation), zap.Int("turn", state.turn))
 
+	outcome := auditdomain.OutcomeProposed
+	switch {
+	case !decision.Allowed:
+		outcome = auditdomain.OutcomeDenied
+	case !decision.RequiresConfirmation:
+		outcome = auditdomain.OutcomeAutoExecuted
+	}
+	s.audit.Record(auditdomain.Entry{
+		Session: session, TaskID: id, Kind: action.Kind, Target: action.Target,
+		Outcome: outcome, Reason: decision.Reason,
+	})
+
 	if !decision.Allowed {
 		s.clearTaskIfCurrent(session, state)
 		return contracts.ChatEvent{Type: "chat", ID: id, Content: "I can't do that — " + decision.Reason + "."}
@@ -166,8 +183,6 @@ func (s *Service) step(ctx context.Context, session string, state *taskState) co
 		// Low-risk tool (e.g. fill): skip the confirmation round-trip and go
 		// straight to execute. The task still continues from Observe once the
 		// extension reports back, same as a confirmed action would.
-		s.log.Info("audit: action auto-executed",
-			zap.String("session", session), zap.String("id", id), zap.String("kind", action.Kind))
 		return contracts.ChatEvent{Type: "execute", ID: id, Action: action}
 	}
 
@@ -204,16 +219,28 @@ func (s *Service) Confirm(session, id string, approved bool) (contracts.ChatEven
 	if !approved {
 		s.clearTaskIfCurrent(session, state)
 		s.log.Info("audit: action rejected", zap.String("session", session), zap.String("id", id))
+		s.audit.Record(auditdomain.Entry{
+			Session: session, TaskID: id, Kind: action.Kind, Target: action.Target,
+			Outcome: auditdomain.OutcomeRejected,
+		})
 		return contracts.ChatEvent{Type: "cancelled", ID: id, Content: "Cancelled."}, true
 	}
 
 	if decision := s.safety.Evaluate(action); !decision.Allowed {
 		s.clearTaskIfCurrent(session, state)
 		s.log.Warn("audit: action denied on confirm", zap.String("session", session), zap.String("id", id))
+		s.audit.Record(auditdomain.Entry{
+			Session: session, TaskID: id, Kind: action.Kind, Target: action.Target,
+			Outcome: auditdomain.OutcomeDenied, Reason: decision.Reason,
+		})
 		return contracts.ChatEvent{Type: "chat", ID: id, Content: "I can't do that — " + decision.Reason + "."}, true
 	}
 
 	s.log.Info("audit: action executed", zap.String("session", session), zap.String("id", id), zap.String("kind", action.Kind))
+	s.audit.Record(auditdomain.Entry{
+		Session: session, TaskID: id, Kind: action.Kind, Target: action.Target,
+		Outcome: auditdomain.OutcomeExecuted,
+	})
 	return contracts.ChatEvent{Type: "execute", ID: id, Action: &action}, true
 }
 
@@ -242,13 +269,16 @@ func (s *Service) Observe(ctx context.Context, session, id string, success bool,
 	s.mu.Unlock()
 
 	observation := "The action succeeded."
+	outcome := auditdomain.OutcomeObservedOK
 	if !success {
 		observation = "The action failed"
 		if detail != "" {
 			observation += ": " + detail
 		}
 		observation += "."
+		outcome = auditdomain.OutcomeObservedFail
 	}
+	s.audit.Record(auditdomain.Entry{Session: session, TaskID: id, Outcome: outcome, Reason: detail})
 	state.messages = append(state.messages, llm.Message{Role: "system", Content: "Observation: " + observation})
 
 	return s.step(ctx, session, state)
@@ -276,6 +306,7 @@ func (s *Service) Interrupt(session, id string) (contracts.ChatEvent, bool) {
 	}
 
 	s.log.Info("audit: task interrupted", zap.String("session", session), zap.String("id", id))
+	s.audit.Record(auditdomain.Entry{Session: session, TaskID: id, Outcome: auditdomain.OutcomeInterrupted})
 	return contracts.ChatEvent{Type: "interrupted", ID: id, Content: "Stopped."}, true
 }
 

@@ -6,10 +6,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	auditapp "github.com/levelaxis/charli/backend/internal/modules/audit/application"
+	auditdomain "github.com/levelaxis/charli/backend/internal/modules/audit/domain"
+	auditinfra "github.com/levelaxis/charli/backend/internal/modules/audit/infrastructure"
 	chat "github.com/levelaxis/charli/backend/internal/modules/chat/interfaces"
 	health "github.com/levelaxis/charli/backend/internal/modules/health/interfaces"
 	"github.com/levelaxis/charli/backend/internal/safety"
 	"github.com/levelaxis/charli/backend/internal/shared/config"
+	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/database"
 	"github.com/levelaxis/charli/backend/internal/shared/infrastructure/llm"
 	"github.com/levelaxis/charli/backend/internal/shared/middleware"
 	"github.com/levelaxis/charli/backend/internal/stream"
@@ -40,7 +44,8 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 	llmClient := llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel)
 	registry := tools.Default()
 	safetyEngine := safety.NewEngine(registry)
-	chat.RegisterRoutes(api, chat.NewHandler(hub, llmClient, log, registry, safetyEngine))
+	auditService := auditapp.NewService(newAuditRepository(cfg, log), log)
+	chat.RegisterRoutes(api, chat.NewHandler(hub, llmClient, log, registry, safetyEngine, auditService))
 
 	return &App{Config: cfg, Logger: log, Engine: engine}
 }
@@ -49,4 +54,25 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 func (a *App) Run() error {
 	a.Logger.Info("charli backend listening", zap.String("port", a.Config.Port))
 	return a.Engine.Run(":" + a.Config.Port)
+}
+
+// newAuditRepository connects to Postgres for persisted audit logging, if
+// configured. Returns nil (audit.Service degrades to log-only) when no
+// DatabaseURL is set or the database is unreachable — a missing/broken
+// audit database must never stop the backend from starting.
+func newAuditRepository(cfg *config.Config, log *zap.Logger) auditdomain.Repository {
+	if cfg.DatabaseURL == "" {
+		return nil
+	}
+	db, err := database.Connect(cfg.DatabaseURL)
+	if err != nil {
+		log.Warn("audit: database unavailable, persisting to logs only", zap.Error(err))
+		return nil
+	}
+	repo, err := auditinfra.NewGormRepository(db)
+	if err != nil {
+		log.Warn("audit: migration failed, persisting to logs only", zap.Error(err))
+		return nil
+	}
+	return repo
 }
