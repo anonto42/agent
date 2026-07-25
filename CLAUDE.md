@@ -63,3 +63,12 @@ WebSockets only if a continuous two-way stream is ever required (L3/L4).
 - Sensitive fields (passwords, card numbers, tokens) are redacted before any
   page content is sent to the LLM.
 - Every tool call the agent makes is audit-logged.
+- Every logical block of code must have a plain-English comment above it
+  explaining what it does (e.g. "Load runtime configuration from environment
+  variables and .env file."). These describe intent, not mechanics.
+
+## Git commits
+
+Author identity for every commit comes from this machine's local git config
+(`git config user.name` / `user.email`) — never override it, and never add a
+Claude/AI co-author trailer to commit messages in this repo.
