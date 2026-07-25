@@ -61,7 +61,7 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 	// L0-L3: wire the realtime chat module — SSE stream, LLM client, tool registry,
 	// safety engine, audit service — and mount its routes.
 	hub := stream.NewHub()
-	llmClient := llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel)
+	llmClient := llm.New(cfg.LLMProvider, cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel)
 	registry := tools.Default()
 	safetyEngine := safety.NewEngine(registry)
 	auditService := auditapp.NewService(newAuditRepository(db, log), log)

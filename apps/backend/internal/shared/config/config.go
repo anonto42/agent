@@ -16,11 +16,14 @@ type Config struct {
 	DatabaseURL string
 	RedisURL    string
 
-	// LLM — OpenAI-compatible endpoint (defaults to Google Gemini's free tier).
-	// Swap provider by changing these three env vars only.
-	LLMBaseURL string
-	LLMAPIKey  string
-	LLMModel   string
+	// LLM — defaults to Google Gemini's free tier over its OpenAI-compatible
+	// endpoint. Swap provider by changing these four env vars: LLM_PROVIDER
+	// picks the implementation ("openai", "google", or "deepseek"; see
+	// internal/shared/infrastructure/llm), the rest configure it.
+	LLMProvider string
+	LLMBaseURL  string
+	LLMAPIKey   string
+	LLMModel    string
 
 	// Google OAuth (L4 — Sheets integration). Empty means the integration is
 	// unavailable; it never blocks startup.
@@ -48,6 +51,7 @@ func Load() (*Config, error) {
 	v.SetDefault("ENV", "development")
 	v.SetDefault("PORT", "8080")
 	v.SetDefault("LOG_LEVEL", "info")
+	v.SetDefault("LLM_PROVIDER", "openai")
 	v.SetDefault("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
 	v.SetDefault("LLM_MODEL", "gemini-2.0-flash")
 
@@ -58,6 +62,7 @@ func Load() (*Config, error) {
 		LogLevel:    v.GetString("LOG_LEVEL"),
 		DatabaseURL: v.GetString("DATABASE_URL"),
 		RedisURL:    v.GetString("REDIS_URL"),
+		LLMProvider: v.GetString("LLM_PROVIDER"),
 		LLMBaseURL:  v.GetString("LLM_BASE_URL"),
 		LLMAPIKey:   v.GetString("LLM_API_KEY"),
 		LLMModel:    v.GetString("LLM_MODEL"),

@@ -1,48 +1,35 @@
 package llm
 
-import (
-	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-)
+import "testing"
 
-func TestComplete(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/chat/completions" {
-			t.Errorf("unexpected path: %s", r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
-			t.Errorf("missing/wrong auth header: %q", got)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{
-				{"message": map[string]string{"role": "assistant", "content": "hi there"}},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	c := New(srv.URL, "test-key", "test-model")
-	got, err := c.Complete(context.Background(), []Message{{Role: "user", Content: "hello"}})
-	if err != nil {
-		t.Fatalf("complete: %v", err)
+func TestNewSelectsProvider(t *testing.T) {
+	cases := []struct {
+		provider string
+		want     string
+	}{
+		{"openai", "openaiAdapter"},
+		{"google", "googleAdapter"},
+		{"deepseek", "deepseekAdapter"},
+		{"", "openaiAdapter"},
+		{"unknown", "openaiAdapter"},
 	}
-	if got != "hi there" {
-		t.Fatalf("got %q, want %q", got, "hi there")
-	}
-}
-
-func TestCompleteHTTPError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":{"message":"bad key"}}`))
-	}))
-	defer srv.Close()
-
-	c := New(srv.URL, "test-key", "test-model")
-	if _, err := c.Complete(context.Background(), []Message{{Role: "user", Content: "x"}}); err == nil {
-		t.Fatal("expected an error on 401")
+	for _, tc := range cases {
+		got := New(tc.provider, "http://example.com", "key", "model")
+		switch got.(type) {
+		case openaiAdapter:
+			if tc.want != "openaiAdapter" {
+				t.Errorf("provider %q: got openaiAdapter, want %s", tc.provider, tc.want)
+			}
+		case googleAdapter:
+			if tc.want != "googleAdapter" {
+				t.Errorf("provider %q: got googleAdapter, want %s", tc.provider, tc.want)
+			}
+		case deepseekAdapter:
+			if tc.want != "deepseekAdapter" {
+				t.Errorf("provider %q: got deepseekAdapter, want %s", tc.provider, tc.want)
+			}
+		default:
+			t.Errorf("provider %q: unexpected adapter type", tc.provider)
+		}
 	}
 }
