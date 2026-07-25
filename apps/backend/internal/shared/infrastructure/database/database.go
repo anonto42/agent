@@ -11,6 +11,7 @@ import (
 // is fatal — Charli's audit trail degrades to log-only when there's no
 // reachable database, it doesn't refuse to start.
 func Connect(dsn string) (*gorm.DB, error) {
+	// Open a Postgres connection via GORM with warnings-level logging.
 	return gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
 	})

@@ -21,17 +21,21 @@ type Hub struct {
 
 // NewHub creates an empty Hub.
 func NewHub() *Hub {
+	// Initialise the sessions map (nil map would panic on write).
 	return &Hub{sessions: make(map[string]chan Event)}
 }
 
 // Subscribe registers a session and returns its event channel. A prior stream
 // for the same session (e.g. a reconnect) is closed and replaced.
 func (h *Hub) Subscribe(session string) <-chan Event {
+	// Lock for writing: we're mutating the sessions map.
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// If this session already has a channel, close the old one first.
 	if old, ok := h.sessions[session]; ok {
 		close(old)
 	}
+	// Create a new buffered channel and register it.
 	ch := make(chan Event, 16)
 	h.sessions[session] = ch
 	return ch
@@ -39,6 +43,7 @@ func (h *Hub) Subscribe(session string) <-chan Event {
 
 // Unsubscribe removes a session and closes its channel.
 func (h *Hub) Unsubscribe(session string) {
+	// Lock for writing, then close the channel and remove the session.
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if ch, ok := h.sessions[session]; ok {
@@ -50,12 +55,14 @@ func (h *Hub) Unsubscribe(session string) {
 // Publish delivers an event to a session. It reports whether a live session
 // received it. A full buffer drops the event (Phase 0 behaviour).
 func (h *Hub) Publish(session string, e Event) bool {
+	// Lock for reading: we only need to look up the channel, not modify the map.
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	ch, ok := h.sessions[session]
 	if !ok {
 		return false
 	}
+	// Try a non-blocking send; drop the event if the buffer is full.
 	select {
 	case ch <- e:
 		return true
