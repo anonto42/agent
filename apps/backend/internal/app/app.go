@@ -38,23 +38,28 @@ type App struct {
 
 // New builds the application: router, middleware, and module routes.
 func New(cfg *config.Config, log *zap.Logger) *App {
+	// Set Gin to release mode in production to disable debug logging.
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	// Create the Gin engine with recovery and CORS middleware.
 	engine := gin.New()
 	engine.Use(gin.Recovery(), middleware.CORS())
 
+	// Mount the health check route at /api/v1/health.
 	api := engine.Group("/api/v1")
 	health.RegisterRoutes(api, health.NewHandler())
 
+	// Attempt to connect to Postgres; returns nil if unavailable (never blocks startup).
 	db := connectDatabase(cfg, log)
 
-	// L4: connect to Google, act on a Sheet on the user's behalf.
+	// L4: wire the Google integration (OAuth + Sheets) and mount its routes.
 	googleService := googleapp.NewService(newGoogleOAuthConfig(cfg), newGoogleRepository(db, log))
 	google.RegisterRoutes(api.Group("/integrations/google"), google.NewHandler(googleService))
 
-	// Realtime chat over SSE (stream down) + POST (send up), answered by the LLM.
+	// L0-L3: wire the realtime chat module — SSE stream, LLM client, tool registry,
+	// safety engine, audit service — and mount its routes.
 	hub := stream.NewHub()
 	llmClient := llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel)
 	registry := tools.Default()
@@ -67,6 +72,7 @@ func New(cfg *config.Config, log *zap.Logger) *App {
 
 // Run starts the HTTP server and blocks.
 func (a *App) Run() error {
+	// Log the listening address, then block forever serving requests.
 	a.Logger.Info("charli backend listening", zap.String("port", a.Config.Port))
 	return a.Engine.Run(":" + a.Config.Port)
 }
@@ -77,9 +83,11 @@ func (a *App) Run() error {
 // stop the backend from starting; callers degrade to their non-persisted
 // behavior instead.
 func connectDatabase(cfg *config.Config, log *zap.Logger) *gorm.DB {
+	// Return nil if no database URL is configured — callers will degrade gracefully.
 	if cfg.DatabaseURL == "" {
 		return nil
 	}
+	// Attempt the connection; log a warning on failure and return nil.
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Warn("database unavailable, persisted features are disabled", zap.Error(err))
@@ -91,9 +99,11 @@ func connectDatabase(cfg *config.Config, log *zap.Logger) *gorm.DB {
 // newAuditRepository builds the audit log's repository, if a database is
 // available. Returns nil (audit.Service degrades to log-only) otherwise.
 func newAuditRepository(db *gorm.DB, log *zap.Logger) auditdomain.Repository {
+	// No database available — audit service will degrade to log-only.
 	if db == nil {
 		return nil
 	}
+	// Build the GORM-backed repository; migration failure is non-fatal.
 	repo, err := auditinfra.NewGormRepository(db)
 	if err != nil {
 		log.Warn("audit: migration failed, persisting to logs only", zap.Error(err))
@@ -107,9 +117,11 @@ func newAuditRepository(db *gorm.DB, log *zap.Logger) auditdomain.Repository {
 // unavailable) otherwise — there's nowhere to durably store OAuth tokens
 // without one.
 func newGoogleRepository(db *gorm.DB, log *zap.Logger) googledomain.Repository {
+	// No database available — no place to store OAuth tokens, so integration is disabled.
 	if db == nil {
 		return nil
 	}
+	// Build the GORM-backed repository; migration failure is non-fatal.
 	repo, err := googleinfra.NewGormRepository(db)
 	if err != nil {
 		log.Warn("google: migration failed, integration unavailable", zap.Error(err))
@@ -122,9 +134,11 @@ func newGoogleRepository(db *gorm.DB, log *zap.Logger) googledomain.Repository {
 // if credentials are set. Returns nil (google.Service reports itself
 // unavailable) otherwise.
 func newGoogleOAuthConfig(cfg *config.Config) *oauth2.Config {
+	// Missing credentials mean the Google integration is unavailable.
 	if cfg.GoogleClientID == "" || cfg.GoogleClientSecret == "" {
 		return nil
 	}
+	// Build the OAuth config with Sheets API scope and localhost callback.
 	return &oauth2.Config{
 		ClientID:     cfg.GoogleClientID,
 		ClientSecret: cfg.GoogleClientSecret,

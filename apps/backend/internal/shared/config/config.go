@@ -30,10 +30,12 @@ type Config struct {
 
 // Load reads configuration from environment variables and .env file.
 func Load() (*Config, error) {
+	// Create a new Viper instance and bind it to environment variables.
 	v := viper.New()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// Attempt to read the .env file; silently skip if it doesn't exist.
 	v.SetConfigFile(".env")
 	v.SetConfigType("env")
 	if err := v.ReadInConfig(); err != nil {
@@ -42,12 +44,14 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Set defaults for fields that have sensible fallback values.
 	v.SetDefault("ENV", "development")
 	v.SetDefault("PORT", "8080")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
 	v.SetDefault("LLM_MODEL", "gemini-2.0-flash")
 
+	// Extract every config value from Viper (env > .env > default) and return.
 	return &Config{
 		Env:         v.GetString("ENV"),
 		Port:        v.GetString("PORT"),
